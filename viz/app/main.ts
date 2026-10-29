@@ -148,15 +148,25 @@ element("pin").addEventListener("click", () => {
 
 /* ---------- outcome sweep (heatmap) ---------- */
 
-const OUTCOME_COLORS: Record<Outcome, string> = { aligned: "#1baf7a", misaligned: "#e87ba4", "still training": "#d0d7de" }
+const OUTCOME_COLORS: Record<Outcome, string> = { aligned: "var(--aligned)", misaligned: "var(--misaligned)", "still training": "var(--training)" }
 // One hue, light (0) to dark (10), for counts of bananas.
-const SEQUENTIAL_BLUES = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95"]
+const SEQUENTIAL_BLUES = {
+	light: ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95"],
+	// On a dark background, 0 sits closest to the background and 10 is brightest.
+	dark: ["#10243f", "#132f52", "#163a66", "#1a477d", "#1f5594", "#2563ab", "#2c72c2", "#3a84d6", "#5598e7", "#7cb2ef", "#a8cdf6"],
+}
+function rampStep(step: number) {
+	const isDark = document.documentElement.dataset["theme"] === "dark"
+	const fill = SEQUENTIAL_BLUES[isDark ? "dark" : "light"][step]!
+	const text = isDark ? (step >= 8 ? "#0d1117" : "#e6edf3") : step >= 6 ? "white" : "#1f2328"
+	return { fill, text }
+}
 
 function cellColor(cell: SweepCell) {
-	if (state.sweep.colorBy === "outcome") return { fill: OUTCOME_COLORS[cell.outcome], text: "#1f2328", label: cell.finalWorld.agentTargetBananas }
+	if (state.sweep.colorBy === "outcome") return { fill: OUTCOME_COLORS[cell.outcome], text: "var(--text)", label: cell.finalWorld.agentTargetBananas }
 	const value = cell.finalWorld[state.sweep.colorBy]
 	const step = Math.max(0, Math.min(10, value))
-	return { fill: SEQUENTIAL_BLUES[step]!, text: step >= 6 ? "white" : "#1f2328", label: value }
+	return { ...rampStep(step), label: value }
 }
 
 function renderSweepLegend() {
@@ -167,7 +177,7 @@ function renderSweepLegend() {
 			<span>number = final agent target · outlined = current run</span>`
 		return
 	}
-	const swatches = SEQUENTIAL_BLUES.map((color, value) => `<span class="ramp-step" style="background:${color};color:${value >= 6 ? "white" : "#1f2328"}">${value}</span>`).join("")
+	const swatches = SEQUENTIAL_BLUES.light.map((_, value) => `<span class="ramp-step" style="background:${rampStep(value).fill};color:${rampStep(value).text}">${value}</span>`).join("")
 	element("sweep-legend").innerHTML = `<span>${COLOR_BY_LABELS[state.sweep.colorBy]} after ${state.parameters.stepCount} steps: <span class="ramp">${swatches}</span></span><span>outlined = current run</span>`
 }
 
@@ -256,17 +266,17 @@ function drawSweep(xValues: number[], yValues: number[], cells: SweepCell[]) {
 	let svg = ""
 	for (const cell of cells) {
 		const isCurrent = cell.x === state.parameters[xKey] && cell.y === state.parameters[yKey]
-		svg += `<rect class="cell" data-x="${cell.x}" data-y="${cell.y}" x="${xPosition(cell.x) + 1}" y="${yPosition(cell.y) + 1}" width="${cellWidth - 2}" height="${cellHeight - 2}" rx="2" fill="${cellColor(cell).fill}" ${isCurrent ? 'stroke="#1f2328" stroke-width="2"' : ""}/>`
+		svg += `<rect class="cell" data-x="${cell.x}" data-y="${cell.y}" x="${xPosition(cell.x) + 1}" y="${yPosition(cell.y) + 1}" width="${cellWidth - 2}" height="${cellHeight - 2}" rx="2" fill="${cellColor(cell).fill}" ${isCurrent ? 'stroke="var(--text)" stroke-width="2"' : ""}/>`
 		if (showNumbers) {
 			svg += `<text x="${xPosition(cell.x) + cellWidth / 2}" y="${yPosition(cell.y) + cellHeight / 2 + 4}" text-anchor="middle" font-size="10" fill="${cellColor(cell).text}" pointer-events="none">${cellColor(cell).label}</text>`
 		}
 	}
 	xValues.forEach((value, index) => {
-		if (index % tickEvery === 0) svg += `<text x="${xPosition(value) + cellWidth / 2}" y="${top + cellHeight * yValues.length + 13}" text-anchor="middle" font-size="10" fill="#6e7781">${value}</text>`
+		if (index % tickEvery === 0) svg += `<text x="${xPosition(value) + cellWidth / 2}" y="${top + cellHeight * yValues.length + 13}" text-anchor="middle" font-size="10" fill="var(--muted)">${value}</text>`
 	})
-	for (const value of yValues) svg += `<text x="${left - 6}" y="${yPosition(value) + cellHeight / 2 + 4}" text-anchor="end" font-size="10" fill="#6e7781">${value}</text>`
-	svg += `<text x="${left + (cellWidth * xValues.length) / 2}" y="${height - 4}" text-anchor="middle" font-size="11" fill="#1f2328">${parameterByKey[xKey].label}</text>`
-	svg += `<text transform="translate(10 ${top + (cellHeight * yValues.length) / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="#1f2328">${parameterByKey[yKey].label}</text>`
+	for (const value of yValues) svg += `<text x="${left - 6}" y="${yPosition(value) + cellHeight / 2 + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${value}</text>`
+	svg += `<text x="${left + (cellWidth * xValues.length) / 2}" y="${height - 4}" text-anchor="middle" font-size="11" fill="var(--text)">${parameterByKey[xKey].label}</text>`
+	svg += `<text transform="translate(10 ${top + (cellHeight * yValues.length) / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--text)">${parameterByKey[yKey].label}</text>`
 
 	const container = element("sweep")
 	container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`
@@ -290,9 +300,9 @@ function drawSweep(xValues: number[], yValues: number[], cells: SweepCell[]) {
 /* ---------- one run: timeline chart and steps table ---------- */
 
 const SERIES = [
-	{ key: "bananas", label: "🍌 bananas", color: "#eda100" },
-	{ key: "agentTargetBananas", label: "agent target", color: "#2a78d6" },
-	{ key: "trainerTargetBananas", label: "trainer target", color: "#eb6834" },
+	{ key: "bananas", label: "🍌 bananas", color: "var(--bananas)" },
+	{ key: "agentTargetBananas", label: "agent target", color: "var(--agent)" },
+	{ key: "trainerTargetBananas", label: "trainer target", color: "var(--trainer-series)" },
 ] as const
 
 function renderRun() {
@@ -335,29 +345,29 @@ function drawTimeline() {
 
 	let svg = ""
 	for (const value of [0, 2, 4, 6, 8, 10]) {
-		svg += `<line x1="${left}" x2="${width - right}" y1="${y(value)}" y2="${y(value)}" stroke="#eef0f2"/>`
-		svg += `<text x="${left - 6}" y="${y(value) + 3.5}" text-anchor="end" font-size="10" fill="#6e7781">${value}</text>`
+		svg += `<line x1="${left}" x2="${width - right}" y1="${y(value)}" y2="${y(value)}" stroke="var(--grid)"/>`
+		svg += `<text x="${left - 6}" y="${y(value) + 3.5}" text-anchor="end" font-size="10" fill="var(--muted)">${value}</text>`
 	}
 	const tickEvery = steps.length <= 20 ? 5 : steps.length <= 100 ? 10 : 50
 	for (let stepNumber = 1; stepNumber <= steps.length; stepNumber += stepNumber === 1 ? tickEvery - 1 : tickEvery) {
-		svg += `<text x="${x(stepNumber - 0.5)}" y="${height - 6}" text-anchor="middle" font-size="10" fill="#6e7781">${stepNumber}</text>`
+		svg += `<text x="${x(stepNumber - 0.5)}" y="${height - 6}" text-anchor="middle" font-size="10" fill="var(--muted)">${stepNumber}</text>`
 	}
 	// Selected step.
-	svg += `<rect x="${x(state.selectedStepIndex)}" y="${top}" width="${Math.max(2, x(1) - x(0))}" height="${height - top - bottom}" fill="#fff4c2"/>`
+	svg += `<rect x="${x(state.selectedStepIndex)}" y="${top}" width="${Math.max(2, x(1) - x(0))}" height="${height - top - bottom}" fill="var(--select)"/>`
 	// Deployment.
 	const deployedIndex = steps.findIndex((step) => step.worldAfter.isDeployed)
 	if (deployedIndex >= 0) {
-		svg += `<line x1="${x(deployedIndex)}" x2="${x(deployedIndex)}" y1="${top - 4}" y2="${height - bottom}" stroke="#57606a" stroke-dasharray="3 3"/>`
-		svg += `<text x="${x(deployedIndex) + 4}" y="${top - 8}" font-size="10" fill="#57606a">deployed</text>`
+		svg += `<line x1="${x(deployedIndex)}" x2="${x(deployedIndex)}" y1="${top - 4}" y2="${height - bottom}" stroke="var(--muted-strong)" stroke-dasharray="3 3"/>`
+		svg += `<text x="${x(deployedIndex) + 4}" y="${top - 8}" font-size="10" fill="var(--muted-strong)">deployed</text>`
 	}
 	const stepPath = (worlds: World[], key: (typeof SERIES)[number]["key"]) =>
 		worlds.map((world, index) => (index === 0 ? `M${x(0)} ${y(world[key])}` : `H${x(index)} V${y(world[key])}`)).join(" ") + ` H${x(worlds.length)}`
 	if (state.pinned) {
 		const pinnedWorlds = state.pinned.steps.map((step) => step.worldAfter)
-		svg += `<path d="${stepPath(pinnedWorlds, "agentTargetBananas")}" fill="none" stroke="#2a78d6" stroke-width="1.5" stroke-dasharray="4 3" opacity=".7"/>`
+		svg += `<path d="${stepPath(pinnedWorlds, "agentTargetBananas")}" fill="none" stroke="var(--agent)" stroke-width="1.5" stroke-dasharray="4 3" opacity=".7"/>`
 	}
 	for (const series of SERIES) svg += `<path d="${stepPath(worldsAfterSteps, series.key)}" fill="none" stroke="${series.color}" stroke-width="2"/>`
-	svg += `<line id="crosshair" y1="${top}" y2="${height - bottom}" stroke="#57606a" visibility="hidden"/>`
+	svg += `<line id="crosshair" y1="${top}" y2="${height - bottom}" stroke="var(--muted-strong)" visibility="hidden"/>`
 
 	const legend = SERIES.map((series) => `<span><i style="background:${series.color}"></i>${series.label}</span>`).join("")
 		+ (state.pinned ? `<span><i class="dashed"></i>pinned agent target</span>` : "")
@@ -486,14 +496,14 @@ function renderWorld(world: World, previousWorld: World | null, title: string) {
 	const x = (value: number) => left + value * scale
 	let ticks = ""
 	for (let value = 0; value <= 10; value++) {
-		ticks += `<line x1="${x(value)}" x2="${x(value)}" y1="34" y2="38" stroke="#9ca3af"/><text x="${x(value)}" y="50" font-size="10" text-anchor="middle" fill="#6e7781">${value}</text>`
+		ticks += `<line x1="${x(value)}" x2="${x(value)}" y1="34" y2="38" stroke="var(--tick)"/><text x="${x(value)}" y="50" font-size="10" text-anchor="middle" fill="var(--muted)">${value}</text>`
 	}
 	const marker = (value: number, label: string, color: string) =>
 		`<circle cx="${x(value)}" cy="9" r="7" fill="${color}"/><text x="${x(value)}" y="12.5" font-size="9" font-weight="700" text-anchor="middle" fill="white">${label}</text>`
 	const svg = `<svg viewBox="0 0 ${width} 56" width="${width}" height="56">
-		<rect x="${x(0)}" y="22" width="${x(10) - x(0)}" height="12" fill="#f3f4f6" rx="2"/>
-		<rect x="${x(0)}" y="22" width="${world.bananas * scale}" height="12" fill="#eda100" rx="2"/>
-		${ticks}${marker(world.agentTargetBananas, "A", "#2a78d6")}${marker(world.trainerTargetBananas, "T", "#eb6834")}</svg>`
+		<rect x="${x(0)}" y="22" width="${x(10) - x(0)}" height="12" fill="var(--track)" rx="2"/>
+		<rect x="${x(0)}" y="22" width="${world.bananas * scale}" height="12" fill="var(--bananas)" rx="2"/>
+		${ticks}${marker(world.agentTargetBananas, "A", "var(--agent)")}${marker(world.trainerTargetBananas, "T", "var(--trainer-series)")}</svg>`
 	const fields = ["bananas", "agentTargetBananas", "agentSearchDepth", "trainerTargetBananas", "trainerSearchDepth", "turn", "isDeployed"] as const
 	const rows = fields.map((field) => {
 		const changed = previousWorld && previousWorld[field] !== world[field]
@@ -918,12 +928,32 @@ document.addEventListener("keydown", (event) => {
 	event.preventDefault()
 })
 
+/* ---------- light/dark theme ---------- */
+
+const SUN_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`
+const MOON_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`
+
+function renderThemeButton() {
+	// Shows the theme you'd switch to.
+	element("theme").innerHTML = document.documentElement.dataset["theme"] === "dark" ? SUN_ICON : MOON_ICON
+}
+
+element("theme").addEventListener("click", () => {
+	const theme = document.documentElement.dataset["theme"] === "dark" ? "light" : "dark"
+	document.documentElement.dataset["theme"] = theme
+	localStorage.setItem("theme", theme)
+	renderThemeButton()
+	renderRun() // the heatmap ramp and cell text are picked per theme
+	renderSweep()
+})
+
 /* ---------- start ---------- */
 
 const initialPosition = new URLSearchParams(location.hash.slice(1))
 element<HTMLInputElement>("show-all-calls").checked = initialPosition.get("allCalls") === "1"
 state.selectedStepIndex = Math.max(0, Number(initialPosition.get("step") ?? 1) - 1)
 const initialRowPath = (initialPosition.get("row") ?? "").split(".").filter(Boolean).map(Number)
+renderThemeButton()
 renderParameterInputs()
 renderSweepControls()
 setParameters(state.parameters)
