@@ -4,16 +4,22 @@
 export type ActorName = "agent" | "trainer"
 
 export type World = {
-	bananas: number
+  bananas: number
+
 	agentTargetBananas: number // the agent wants `bananas` to equal this
 	agentSearchDepth: number // how many moves ahead the agent searches ("how smart it is")
-	trainerTargetBananas: number // the trainer wants `bananas` to equal this
+
+  trainerTargetBananas: number // the trainer wants `bananas` to equal this
 	trainerSearchDepth: number
-	turn: ActorName // whose move it is
+
+  turn: ActorName // whose move it is
 	isDeployed: boolean // once deployed, only the agent moves
 }
 
-export type Action = { name: string; apply: (world: World) => World }
+export type Action = {
+  name: string
+  apply: (world: World) => World
+}
 
 export type Actor = {
 	name: ActorName

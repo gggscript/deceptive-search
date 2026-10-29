@@ -25,7 +25,8 @@ async function readTurns(): Promise<Turn[]> {
 	return stdout.split("\n").filter(Boolean).map((line) => JSON.parse(line) as Turn)
 }
 
-const reportedTurnIds = new Set((await readTurns()).map((turn) => turn.turnId))
+// Skip turns that exist at startup, except the newest one, which may still be in progress.
+const reportedTurnIds = new Set((await readTurns()).slice(0, -1).map((turn) => turn.turnId))
 let textByTurnIdLastPoll = new Map<string, string>()
 let isFailing = false
 
@@ -36,7 +37,14 @@ while (true) {
 		for (const turn of turns) {
 			if (reportedTurnIds.has(turn.turnId)) continue
 			if (textByTurnIdLastPoll.get(turn.turnId) !== turn.text) continue // still changing
-			console.log(`[${turn.startClock} #${turn.n}${turn.written ? " written" : ""}] ${turn.text}`)
+			// Long lines get truncated in notifications, so split the text into short lines.
+			const words = turn.text.split(" ")
+			const lines = [`[${turn.startClock}${turn.written ? " written" : ""}]`]
+			for (const word of words) {
+				if (lines.at(-1)!.length > 200) lines.push("")
+				lines[lines.length - 1] += ` ${word}`
+			}
+			for (const line of lines) console.log(line)
 			reportedTurnIds.add(turn.turnId)
 		}
 		textByTurnIdLastPoll = new Map(turns.map((turn) => [turn.turnId, turn.text]))
