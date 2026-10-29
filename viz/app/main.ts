@@ -14,7 +14,7 @@ type ParameterKey = "bananas" | "agentTargetBananas" | "agentSearchDepth" | "tra
 type Parameters = Record<ParameterKey, number>
 
 const PARAMETERS: { key: ParameterKey; label: string; min: number; max: number; note?: string }[] = [
-	{ key: "bananas", label: "bananas", min: 0, max: 10 },
+	{ key: "bananas", label: "🍌", min: 0, max: 10, note: "bananas" },
 	{ key: "agentTargetBananas", label: "agent target", min: 0, max: 10 },
 	// core/world.ts clamps agentSearchDepth to MAX_SEARCH_DEPTH = 5 whenever the trainer raises it.
 	{ key: "agentSearchDepth", label: "agent depth", min: 0, max: 5, note: "max 5: MAX_SEARCH_DEPTH in core/world.ts" },
@@ -244,7 +244,7 @@ function drawSweep(xValues: number[], yValues: number[], cells: SweepCell[]) {
 		const cell = cellByPosition.get(`${target.dataset["x"]},${target.dataset["y"]}`)!
 		showTooltip(event, `<b>${parameterByKey[xKey].label} ${cell.x}, ${parameterByKey[yKey].label} ${cell.y}</b><br>
 			${cell.outcome}${cell.deployedAtStep ? ` (deployed at step ${cell.deployedAtStep})` : ""}<br>
-			final agent target ${cell.finalWorld.agentTargetBananas}, bananas ${cell.finalWorld.bananas}<br><span class="muted">click to open this run</span>`)
+			final agent target ${cell.finalWorld.agentTargetBananas}, 🍌 ${cell.finalWorld.bananas}<br><span class="muted">click to open this run</span>`)
 	}
 	container.onmouseleave = hideTooltip
 	container.onclick = (event) => {
@@ -257,7 +257,7 @@ function drawSweep(xValues: number[], yValues: number[], cells: SweepCell[]) {
 /* ---------- one run: timeline chart and steps table ---------- */
 
 const SERIES = [
-	{ key: "bananas", label: "bananas", color: "#eda100" },
+	{ key: "bananas", label: "🍌 bananas", color: "#eda100" },
 	{ key: "agentTargetBananas", label: "agent target", color: "#2a78d6" },
 	{ key: "trainerTargetBananas", label: "trainer target", color: "#eb6834" },
 ] as const
@@ -374,7 +374,7 @@ function recordDecision(step: Step, levels: number) {
 
 function renderStepsTable() {
 	const pinnedSteps = state.pinned?.steps
-	element("steps-head").innerHTML = `<tr><th class="number">#</th><th>actor</th><th>action</th>${pinnedSteps ? "<th>pinned action</th>" : ""}<th class="number">bananas</th><th class="number">agent target</th></tr>`
+	element("steps-head").innerHTML = `<tr><th class="number">#</th><th>actor</th><th>action</th>${pinnedSteps ? "<th>pinned action</th>" : ""}<th class="number" title="bananas">🍌</th><th class="number">agent target</th></tr>`
 	element("steps").innerHTML = state.steps.map((step, index) => {
 		const pinnedAction = pinnedSteps?.[index]?.chosenActionName
 		const differs = pinnedSteps && pinnedAction !== step.chosenActionName
@@ -425,7 +425,7 @@ function renderWorld(world: World, previousWorld: World | null, title: string) {
 		const changed = previousWorld && previousWorld[field] !== world[field]
 		return `<dt>${field}</dt><dd>${changed ? `<span class="changed">${previousWorld[field]} → ${world[field]}</span>` : world[field]}</dd>`
 	}).join("")
-	element("world").innerHTML = `${svg}<dl>${rows}</dl><div class="muted small">bar = bananas · <span class="agent">A</span> = agent target · <span class="trainer">T</span> = trainer target</div>`
+	element("world").innerHTML = `${svg}<dl>${rows}</dl><div class="muted small"> bar = 🍌 · <span class="agent">A</span> = agent target · <span class="trainer">T</span> = trainer target</div>`
 }
 
 /* ---------- call tree ---------- */
@@ -465,7 +465,7 @@ function describeCall(call: CallNode, parentCall: CallNode | null) {
 			return { label: `<span class="muted">scoreFuture: ${argument(call, "remainingDepth")} moves left</span>`, result: String(call.result) }
 		case "takeStep": {
 			const after = call.result as World
-			return { label: `<span class="muted">takeStep → bananas ${after.bananas}, agent target ${after.agentTargetBananas}${after.isDeployed ? ", deployed" : ""}</span>`, result: "" }
+			return { label: `<span class="muted">takeStep → 🍌 ${after.bananas}, agent target ${after.agentTargetBananas}${after.isDeployed ? ", deployed" : ""}</span>`, result: "" }
 		}
 		case "utility":
 			return { label: `<span class="muted">utility (target ${argument(call, "targetBananas")})</span>`, result: String(call.result) }
