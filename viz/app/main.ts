@@ -52,6 +52,10 @@ function writeHash() {
 	const values = new URLSearchParams()
 	for (const parameter of PARAMETERS) values.set(parameter.key, String(state.parameters[parameter.key]))
 	for (const [key, value] of Object.entries(state.sweep)) values.set(`sweep.${key}`, String(value))
+	// Where you are on the page, so a reload keeps it.
+	values.set("step", String(state.selectedStepIndex + 1))
+	if (showAllCalls()) values.set("allCalls", "1")
+	if (state.selectedRowPath.length) values.set("row", state.selectedRowPath.join("."))
 	history.replaceState(null, "", `#${values}`)
 }
 
@@ -80,6 +84,7 @@ const state = {
 	sweep: initial.sweep,
 	steps: [] as Step[],
 	selectedStepIndex: 0,
+	selectedRowPath: [] as number[], // child indexes from the root of the decision tree
 	pinned: null as { parameters: Parameters; steps: Step[] } | null,
 }
 
@@ -390,18 +395,33 @@ element("steps").addEventListener("click", (event) => {
 	if (row) selectStep(Number(row.dataset["index"]))
 })
 
+// Like scrollIntoView({ block: "nearest" }), but only scrolls `container`, not the page around it.
+function scrollIntoViewWithin(target: HTMLElement | undefined, container: HTMLElement) {
+	if (!target) return
+	const top = target.offsetTop // container is position: relative, so this is relative to it
+	const headerHeight = 22
+	if (top - headerHeight < container.scrollTop) container.scrollTop = top - headerHeight
+	else if (top + target.offsetHeight > container.scrollTop + container.clientHeight) container.scrollTop = top + target.offsetHeight - container.clientHeight
+}
+
 function selectStep(index: number) {
 	if (state.steps.length === 0) return
 	state.selectedStepIndex = Math.max(0, Math.min(state.steps.length - 1, index))
 	for (const row of element("steps").children) row.classList.toggle("selected", Number((row as HTMLElement).dataset["index"]) === state.selectedStepIndex)
-	element("steps").children[state.selectedStepIndex]?.scrollIntoView({ block: "nearest" })
+	scrollIntoViewWithin(element("steps").children[state.selectedStepIndex] as HTMLElement | undefined, element("steps").closest(".steps-scroll") as HTMLElement)
 	drawTimeline()
 	const step = state.steps[state.selectedStepIndex]!
 	const tree = element("tree")
-	tree.replaceChildren(createTreeNode(recordDecision(step, 3), null))
+	const decision = recordDecision(step, 3)
+	tree.replaceChildren(showAllCalls() ? createTreeNode(decision, null) : createDecisionNode(decision, false))
 	selectRow(tree.querySelector(".row") as TreeRow)
 	renderWorld(step.worldAfter, step.worldBefore, `World after step ${state.selectedStepIndex + 1}`)
 }
+
+function showAllCalls() {
+	return element<HTMLInputElement>("show-all-calls").checked
+}
+element("show-all-calls").addEventListener("change", () => selectStep(state.selectedStepIndex))
 
 /* ---------- world view ---------- */
 
@@ -539,11 +559,133 @@ function selectRow(row: TreeRow | undefined | null) {
 	selectedRow?.classList.remove("selected")
 	selectedRow = row
 	row.classList.add("selected")
+	state.selectedRowPath = rowPath(row)
+	writeHash()
 	row.scrollIntoView({ block: "nearest" })
 	const call = row.callNode
 	if (call.functionName === "takeStep") renderWorld(call.result as World, argument(call, "world") as World, "World after takeStep")
 	else if (argument(call, "world")) renderWorld(argument(call, "world") as World, null, `World seen by ${call.functionName}`)
 	renderCode(call)
+}
+
+/* ---------- decision view ---------- */
+// The same recorded calls as the call tree, but only decisions: for each option, its score,
+// the moves it expects (each predicted by the moving actor's own search), and the 🍌 after each.
+
+type ExpectedMove = { decision: CallNode; actorName: string; action: Action; worldAfter: World }
+
+const RECURSING_FUNCTIONS = new Set(["chooseAction", "scoreAction", "scoreFuture"])
+
+// Calls are recorded a few levels deep; re-run a call to record more of it when needed.
+function recordedChildren(call: CallNode) {
+	if (call.children === null || call.children.some((child) => child.children === null && RECURSING_FUNCTIONS.has(child.functionName))) {
+		call.children = recordCalls(3, call.rerun).children
+	}
+	return call.children!
+}
+
+function childCall(call: CallNode, functionName: string) {
+	return recordedChildren(call).find((child) => child.functionName === functionName)
+}
+
+// Follows scoreAction → scoreFuture → (predicted chooseAction, next scoreAction) → … to the end of the search.
+function expectedMoves(option: CallNode): ExpectedMove[] {
+	const moves: ExpectedMove[] = []
+	let current = option
+	while (true) {
+		const future = childCall(current, "scoreFuture")
+		if (!future) break
+		const decision = childCall(future, "chooseAction")
+		const next = childCall(future, "scoreAction")
+		if (!decision || !next) break
+		const worldAfter = childCall(next, "takeStep")!.result as World
+		moves.push({ decision, actorName: (argument(decision, "actor") as Actor).name, action: decision.result as Action, worldAfter })
+		current = next
+	}
+	return moves
+}
+
+function moveChip(actorName: string, actionName: string) {
+	return `<span class="chip"><b class="${actorName}">${actorName === "agent" ? "A" : "T"}</b> ${escapeHtml(actionName)}</span>`
+}
+
+function makeRow(className: string, html: string, call: CallNode, hasChildren: boolean, buildChildren: () => HTMLElement[]) {
+	const node = document.createElement("div")
+	const row = document.createElement("div") as TreeRow
+	row.className = `row ${className}`
+	row.innerHTML = `${chevronIcon}${html}`
+	row.callNode = call
+	row.parentCallNode = null
+	row.isOpen = false
+	const toggle = row.querySelector(".toggle")!
+	if (!hasChildren) toggle.classList.add("leaf")
+	node.append(row)
+	let childrenElement: HTMLDivElement | null = null
+	row.setOpen = (isOpen) => {
+		if (!hasChildren) return
+		if (isOpen && !childrenElement) {
+			childrenElement = document.createElement("div")
+			childrenElement.className = "children"
+			childrenElement.append(...buildChildren())
+			node.append(childrenElement)
+		}
+		if (childrenElement) childrenElement.hidden = !isOpen
+		toggle.classList.toggle("open", isOpen)
+		row.isOpen = isOpen
+	}
+	row.addEventListener("click", (event) => {
+		if ((event.target as Element).closest(".toggle") || row === selectedRow) row.setOpen(!row.isOpen)
+		selectRow(row)
+	})
+	return { node, row }
+}
+
+function createDecisionNode(decision: CallNode, isPrediction: boolean): HTMLDivElement {
+	const actor = argument(decision, "actor") as Actor
+	const world = argument(decision, "world") as World
+	const head = `<span class="label">${isPrediction ? "predict: " : ""}<b class="${actor.name}">${actor.name}</b> chooses <span class="muted">depth ${argument(decision, "searchDepth")}, wants ${targetOf(actor.name, world)}</span></span>${tieBadge(decision)}<span class="result">${escapeHtml((decision.result as Action).name)}</span>`
+	const { node, row } = makeRow("decision", head, decision, true, () => recordedChildren(decision).map((option) => createOptionNode(option, decision)))
+	if (!isPrediction) row.setOpen(true)
+	return node
+}
+
+function createOptionNode(option: CallNode, decision: CallNode): HTMLDivElement {
+	const action = argument(option, "action") as Action
+	const isChosen = action === decision.result
+	const moves = expectedMoves(option)
+	const worldAfterOption = childCall(option, "takeStep")!.result as World
+	const bananas = [(argument(option, "world") as World).bananas, worldAfterOption.bananas, ...moves.map((move) => move.worldAfter.bananas)]
+	const chips = moves.map((move) => moveChip(move.actorName, move.action.name)).join(" → ")
+	const html = `${isChosen ? checkIcon : `<span class="check"></span>`}<span class="option-action">${escapeHtml(action.name)}</span>`
+		+ `<span class="option-score">${option.result}</span>`
+		+ `<span class="option-moves" title="expected moves: ${escapeHtml(moves.map((move) => `${move.actorName} ${move.action.name}`).join(" → "))}">${chips}</span>`
+		+ `<span class="option-bananas" title="bananas before, after this action, and after each expected move">🍌 ${bananas.join(" → ")}</span>`
+	const { node } = makeRow(isChosen ? "option chosen" : "option unchosen", html, option, moves.length > 0, () => moves.map((move) => createDecisionNode(move.decision, true)))
+	return node
+}
+
+/* ---------- position of a row in the tree (for the URL) ---------- */
+
+// Each tree node is a div holding its row and, once opened, a `.children` div of child nodes.
+function rowPath(row: TreeRow) {
+	const path: number[] = []
+	let node = row.parentElement!
+	while (node.parentElement?.classList.contains("children")) {
+		path.unshift([...node.parentElement.children].indexOf(node))
+		node = node.parentElement.parentElement!
+	}
+	return path
+}
+
+function selectRowAtPath(path: number[]) {
+	let node = element("tree").firstElementChild as HTMLElement | null
+	for (const index of path) {
+		const row = node?.querySelector(":scope > .row") as TreeRow | null
+		if (!row) return
+		row.setOpen(true)
+		node = (node!.querySelector(":scope > .children")?.children[index] as HTMLElement | undefined) ?? null
+	}
+	selectRow(node?.querySelector(":scope > .row") as TreeRow | null)
 }
 
 /* ---------- code with values ---------- */
@@ -724,6 +866,11 @@ document.addEventListener("keydown", (event) => {
 
 /* ---------- start ---------- */
 
+const initialPosition = new URLSearchParams(location.hash.slice(1))
+element<HTMLInputElement>("show-all-calls").checked = initialPosition.get("allCalls") === "1"
+state.selectedStepIndex = Math.max(0, Number(initialPosition.get("step") ?? 1) - 1)
+const initialRowPath = (initialPosition.get("row") ?? "").split(".").filter(Boolean).map(Number)
 renderParameterInputs()
 renderSweepControls()
 setParameters(state.parameters)
+selectRowAtPath(initialRowPath)
