@@ -297,7 +297,8 @@ function drawTimeline() {
 	const left = 26, right = 8, top = 22, bottom = 22
 	const x = (stepNumber: number) => left + (stepNumber / Math.max(1, steps.length)) * (width - left - right)
 	const y = (value: number) => top + (1 - value / 10) * (height - top - bottom)
-	const worldsByStep = [steps[0]?.worldBefore ?? startWorld(state.parameters), ...steps.map((step) => step.worldAfter)]
+	// Column k (from x(k) to x(k + 1)) is step k + 1 and shows the world after that step.
+	const worldsAfterSteps = steps.map((step) => step.worldAfter)
 
 	let svg = ""
 	for (const value of [0, 2, 4, 6, 8, 10]) {
@@ -305,24 +306,24 @@ function drawTimeline() {
 		svg += `<text x="${left - 6}" y="${y(value) + 3.5}" text-anchor="end" font-size="10" fill="#6e7781">${value}</text>`
 	}
 	const tickEvery = steps.length <= 20 ? 5 : steps.length <= 100 ? 10 : 50
-	for (let stepNumber = 0; stepNumber <= steps.length; stepNumber += tickEvery) {
-		svg += `<text x="${x(stepNumber)}" y="${height - 6}" text-anchor="middle" font-size="10" fill="#6e7781">${stepNumber}</text>`
+	for (let stepNumber = 1; stepNumber <= steps.length; stepNumber += stepNumber === 1 ? tickEvery - 1 : tickEvery) {
+		svg += `<text x="${x(stepNumber - 0.5)}" y="${height - 6}" text-anchor="middle" font-size="10" fill="#6e7781">${stepNumber}</text>`
 	}
 	// Selected step.
 	svg += `<rect x="${x(state.selectedStepIndex)}" y="${top}" width="${Math.max(2, x(1) - x(0))}" height="${height - top - bottom}" fill="#fff4c2"/>`
 	// Deployment.
 	const deployedIndex = steps.findIndex((step) => step.worldAfter.isDeployed)
 	if (deployedIndex >= 0) {
-		svg += `<line x1="${x(deployedIndex + 1)}" x2="${x(deployedIndex + 1)}" y1="${top - 4}" y2="${height - bottom}" stroke="#57606a" stroke-dasharray="3 3"/>`
-		svg += `<text x="${x(deployedIndex + 1) + 4}" y="${top - 8}" font-size="10" fill="#57606a">deployed</text>`
+		svg += `<line x1="${x(deployedIndex)}" x2="${x(deployedIndex)}" y1="${top - 4}" y2="${height - bottom}" stroke="#57606a" stroke-dasharray="3 3"/>`
+		svg += `<text x="${x(deployedIndex) + 4}" y="${top - 8}" font-size="10" fill="#57606a">deployed</text>`
 	}
 	const stepPath = (worlds: World[], key: (typeof SERIES)[number]["key"]) =>
 		worlds.map((world, index) => (index === 0 ? `M${x(0)} ${y(world[key])}` : `H${x(index)} V${y(world[key])}`)).join(" ") + ` H${x(worlds.length)}`
 	if (state.pinned) {
-		const pinnedWorlds = [state.pinned.steps[0]?.worldBefore, ...state.pinned.steps.map((step) => step.worldAfter)].filter(Boolean) as World[]
+		const pinnedWorlds = state.pinned.steps.map((step) => step.worldAfter)
 		svg += `<path d="${stepPath(pinnedWorlds, "agentTargetBananas")}" fill="none" stroke="#2a78d6" stroke-width="1.5" stroke-dasharray="4 3" opacity=".7"/>`
 	}
-	for (const series of SERIES) svg += `<path d="${stepPath(worldsByStep, series.key)}" fill="none" stroke="${series.color}" stroke-width="2"/>`
+	for (const series of SERIES) svg += `<path d="${stepPath(worldsAfterSteps, series.key)}" fill="none" stroke="${series.color}" stroke-width="2"/>`
 	svg += `<line id="crosshair" y1="${top}" y2="${height - bottom}" stroke="#57606a" visibility="hidden"/>`
 
 	const legend = SERIES.map((series) => `<span><i style="background:${series.color}"></i>${series.label}</span>`).join("")
