@@ -1,0 +1,16 @@
+{
+  "name": "@g/deceptive-search",
+  "description": "",
+  "version": "0.0.1",
+  "author": "gustaf",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "module": "index.ts",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

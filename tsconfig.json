@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    // Latest features
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "types": ["bun"],
+
+    // Bundler mode
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    // Make it easier when switching away from bundler mode
+    "allowImportingTsExtensions": false,
+
+    // Strict
+    "strict": true, // turns on many settings, which are not mentioned below
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowJs": false,
+
+    // Misc
+    "skipLibCheck": true,
+
+    // Shared code from sibling projects. Resolved by Bun and tsc directly, so node_modules holds no links to it.
+    "paths": {
+      "@g/single-file-cache": ["../../modules/single-file-cache/index.ts"],
+      "@g/single-file-cache/*": ["../../modules/single-file-cache/*"],
+      "@g/spotify": ["../../modules/spotify/index.ts"],
+      "@g/spotify/*": ["../../modules/spotify/*"]
+    }
+  },
+  "include": ["**/*.ts"]
+}
