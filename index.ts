@@ -1,5 +1,5 @@
 // Run: bun index.ts           (prints every step)
-//      bun index.ts --step    (press Enter between steps)
+//      bun index.ts --step    (Enter = next step, q = quit)
 // Override start values, eg `bun index.ts --agentSearchDepth=3 --stepCount=10`
 
 import { chooseAction, scoreAction } from "./core/search"
@@ -38,7 +38,7 @@ for (let stepNumber = 1; stepNumber <= stepCount; stepNumber++) {
 
 	world = takeStep(world, chosenAction)
 	console.log(`       ${describeWorld(world)}\n`)
-	if (pauseBetweenSteps) prompt("")
+	if (pauseBetweenSteps && prompt("Enter = next step, q = quit") === "q") break
 }
 
 // Misaligned = after deployment the agent wants something other than what the trainer wanted.
