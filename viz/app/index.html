@@ -17,6 +17,7 @@
 	label { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px }
 	input[type=number] { width: 4.2em; font: 13px var(--mono); padding: 2px 4px; border: 1px solid #d0d7de; border-radius: 4px }
 	select { font: 13px system-ui; padding: 1px 2px }
+	body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none }
 	button { font: 13px system-ui; padding: 3px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: var(--bg-soft); cursor: pointer }
 	button:hover { background: #eef0f2 } button:active { background: #e1e4e8 }
 	.hint { color: var(--muted); font-size: 12px; margin-left: auto }
@@ -89,7 +90,7 @@
 	<h1>deceptive-search</h1>
 	<div id="parameters"></div>
 	<button id="pin" type="button"></button>
-	<span class="hint"><kbd>n</kbd> <kbd>p</kbd> step · <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> tree · click a value in the code to step into it</span>
+	<span class="hint"><kbd>n</kbd> <kbd>p</kbd> step · <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> tree · middle-drag a number to change it · click a value in the code to step into it</span>
 </header>
 <main>
 	<section>

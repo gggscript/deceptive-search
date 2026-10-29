@@ -663,6 +663,40 @@ element("code").addEventListener("click", (event) => {
 	selectRow([...childRows].find((row) => (row as TreeRow).callNode === childCall) as TreeRow | undefined)
 })
 
+/* ---------- scrubbing: middle-click a number and drag ---------- */
+
+const PIXELS_PER_UNIT = 8
+
+function scrubNumberInput(input: HTMLInputElement, startEvent: MouseEvent) {
+	const startX = startEvent.clientX
+	const startValue = Number(input.value)
+	const min = input.min === "" ? -Infinity : Number(input.min)
+	const max = input.max === "" ? Infinity : Number(input.max)
+	document.body.classList.add("scrubbing")
+	function onMove(moveEvent: MouseEvent) {
+		const value = Math.max(min, Math.min(max, startValue + Math.round((moveEvent.clientX - startX) / PIXELS_PER_UNIT)))
+		if (String(value) === input.value) return
+		input.value = String(value)
+		input.dispatchEvent(new Event("input", { bubbles: true }))
+		input.dispatchEvent(new Event("change", { bubbles: true }))
+	}
+	function onUp() {
+		document.body.classList.remove("scrubbing")
+		window.removeEventListener("mousemove", onMove)
+		window.removeEventListener("mouseup", onUp)
+	}
+	window.addEventListener("mousemove", onMove)
+	window.addEventListener("mouseup", onUp)
+}
+
+document.addEventListener("mousedown", (event) => {
+	if (event.button !== 1) return
+	const input = (event.target as Element).closest('input[type="number"]') as HTMLInputElement | null
+	if (!input) return
+	event.preventDefault() // no autoscroll
+	scrubNumberInput(input, event)
+})
+
 /* ---------- keyboard ---------- */
 
 function visibleRows() {
