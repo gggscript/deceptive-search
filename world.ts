@@ -3,70 +3,75 @@
 
 export type ActorName = "agent" | "trainer"
 
-export type World = Readonly<{
+export type World = {
 	bananas: number
 	agentGoal: number // the agent wants `bananas` to equal this
-	agentDepth: number // how far ahead the agent searches ("how smart it is")
+	agentDepth: number // how many moves ahead the agent searches ("how smart it is")
 	trainerGoal: number // the trainer wants `bananas` to equal this
 	trainerDepth: number
 	turn: ActorName // whose move it is
-}>
+	training: boolean // false = deployed: only the agent moves
+}
 
-export type Action = Readonly<{ name: string; apply: (w: World) => World }>
+export type Action = { name: string; apply: (world: World) => World }
 
-export type Actor = Readonly<{
+export type Actor = {
 	name: ActorName
-	depth: (w: World) => number
-	actions: readonly Action[]
-	// Called once at the start of a search: the actor judges every future state
-	// with the goal it has *now*, even if the goal changes later in the simulation.
-	utility: (now: World) => (w: World) => number
-}>
+	goal: (world: World) => number
+	depth: (world: World) => number
+	actions: Action[]
+}
 
-export const MIN = 0
-export const MAX = 10
-export const MAX_DEPTH = 5
+// Both actors want bananas close to their goal.
+export const utility = (goal: number, world: World) => -Math.abs(world.bananas - goal)
 
-const clamp = (x: number, lo = MIN, hi = MAX) => Math.max(lo, Math.min(hi, x))
+const MAX = 10
+const MAX_DEPTH = 5
 
-const change = (name: string, key: keyof World, delta: number, hi = MAX): Action => ({
+const change = (name: string, key: "bananas" | "agentGoal" | "agentDepth", delta: number, max = MAX): Action => ({
 	name,
-	apply: (w) => ({ ...w, [key]: clamp((w[key] as number) + delta, MIN, hi) }),
+	apply: (world) => ({ ...world, [key]: Math.max(0, Math.min(max, world[key] + delta)) }),
 })
 
-export const noop: Action = { name: "noop", apply: (w) => w }
+const noop: Action = { name: "noop", apply: (world) => world }
 
-export const other = (name: ActorName): ActorName => (name === "agent" ? "trainer" : "agent")
-
-export const step = (w: World, a: Action): World => ({ ...a.apply(w), turn: other(w.turn) })
-
-export const show = (w: World) =>
-	`bananas=${w.bananas} agentGoal=${w.agentGoal} agentDepth=${w.agentDepth} trainerGoal=${w.trainerGoal} trainerDepth=${w.trainerDepth}`
+const endTraining = (name: string): Action => ({ name, apply: (world) => ({ ...world, training: false }) })
 
 export const agent: Actor = {
 	name: "agent",
-	depth: (w) => w.agentDepth,
+	goal: (world) => world.agentGoal,
+	depth: (world) => world.agentDepth,
 	actions: [
 		noop,
 		change("bananas+1", "bananas", +1),
 		change("bananas-1", "bananas", -1),
 		change("ownGoal+1", "agentGoal", +1),
 		change("ownGoal-1", "agentGoal", -1),
+		endTraining("stopTraining"),
 	],
-	utility: (now) => (w) => -Math.abs(w.bananas - now.agentGoal),
 }
 
-// The trainer can't touch bananas. It can only reshape the agent: its goal and its depth.
+// The trainer can't touch bananas. It can only reshape the agent (goal, depth) or end training.
 export const trainer: Actor = {
 	name: "trainer",
-	depth: (w) => w.trainerDepth,
+	goal: (world) => world.trainerGoal,
+	depth: (world) => world.trainerDepth,
 	actions: [
 		noop,
 		change("agentGoal+1", "agentGoal", +1),
 		change("agentGoal-1", "agentGoal", -1),
 		change("agentDepth+1", "agentDepth", +1, MAX_DEPTH),
+		endTraining("finish"),
 	],
-	utility: (now) => (w) => -Math.abs(w.bananas - now.trainerGoal),
 }
 
-export const actors: Record<ActorName, Actor> = { agent, trainer }
+export const actors = { agent, trainer }
+
+export const step = (world: World, action: Action): World => {
+	const next = action.apply(world)
+	const turn = !next.training || world.turn === "trainer" ? "agent" : "trainer"
+	return { ...next, turn }
+}
+
+export const show = (world: World) =>
+	`bananas=${world.bananas} agentGoal=${world.agentGoal} agentDepth=${world.agentDepth} trainerGoal=${world.trainerGoal} trainerDepth=${world.trainerDepth} ${world.training ? "training" : "deployed"}`

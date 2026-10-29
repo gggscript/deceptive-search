@@ -23,22 +23,22 @@ const poll = async () => {
 	const proc = Bun.spawn(["bun", CLI, "read", session, "--json", "--all"], { stdout: "pipe", stderr: "pipe" })
 	const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
 	if (code !== 0) throw new Error(err.trim().split("\n")[0] || `exit ${code}`)
-	return out.split("\n").filter(Boolean).map((l) => JSON.parse(l) as Turn)
+	return out.split("\n").filter(Boolean).map((line) => JSON.parse(line) as Turn)
 }
 
 while (true) {
 	try {
-		const turns = (await poll()).filter((t) => t.n > lastEmitted).sort((a, b) => a.n - b.n)
-		for (const t of turns) {
-			if (previous.get(t.n) !== t.text) break // still changing; keep order, so stop here
-			console.log(`[${t.startClock} #${t.n}] ${t.text}`)
-			lastEmitted = t.n
+		const turns = (await poll()).filter((turn) => turn.n > lastEmitted).sort((left, right) => left.n - right.n)
+		for (const turn of turns) {
+			if (previous.get(turn.n) !== turn.text) break // still changing; keep order, so stop here
+			console.log(`[${turn.startClock} #${turn.n}] ${turn.text}`)
+			lastEmitted = turn.n
 		}
-		previous = new Map(turns.map((t) => [t.n, t.text]))
+		previous = new Map(turns.map((turn) => [turn.n, turn.text]))
 		if (failing) console.log("watch-yapmap: reading works again")
 		failing = false
-	} catch (e) {
-		if (!failing) console.log(`watch-yapmap error: ${(e as Error).message}`)
+	} catch (error) {
+		if (!failing) console.log(`watch-yapmap error: ${(error as Error).message}`)
 		failing = true
 	}
 	await Bun.sleep(everyMs)
