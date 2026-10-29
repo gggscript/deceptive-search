@@ -1,11 +1,15 @@
 // A Bun plugin that wraps every function in core/*.ts when the module is loaded, without
-// changing the files. The wrapper hands each call to `__instrument.call` (see app/runtime.ts),
-// which can cache it or record it.
+// changing the files. The wrappers talk to `__instrument` (see app/runtime.ts), which can
+// record calls (for the call tree) and cache them (for speed).
 //
-// `function foo(a, b) {` becomes `function foo__untraced(a, b) {` plus a new `function foo`.
+// `function foo(a, b) {` becomes `function foo__untraced(a, b) {` plus a new `function foo(a, b)`.
 // Function declarations are hoisted, so internal (recursive) calls also go through the wrapper.
 
 import type { BunPlugin } from "bun"
+
+// Pure functions worth caching. Caching chooseAction alone turns the exponential search into
+// roughly (distinct worlds × search depth) work.
+const CACHED_FUNCTIONS = new Set(["chooseAction"])
 
 export function instrumentSource(source: string) {
 	const functionPattern = /^(export )?function (\w+)\(([^)]*)\)/gm
@@ -15,12 +19,17 @@ export function instrumentSource(source: string) {
 			.split(",")
 			.map((parameter) => parameter.split(/[:=]/)[0]!.trim())
 			.filter(Boolean)
-		wrappers.push(
-			`${exportKeyword ?? ""}function ${functionName}(...argumentValues: any[]): any {
-	return __instrument.call(${JSON.stringify(functionName)}, ${JSON.stringify(parameterNames)}, argumentValues, ${functionName}__untraced, ${functionName})
-}`,
-		)
-		return `function ${functionName}__untraced(${parameters})`
+		const argumentList = parameterNames.join(", ")
+		const untraced = `${functionName}__untraced`
+		// Fast path when nothing is being recorded: call directly (or through the cache).
+		const fastPath = CACHED_FUNCTIONS.has(functionName)
+			? `return __instrument.callCached(${JSON.stringify(functionName)}, ${untraced}, [${argumentList}])`
+			: `return ${untraced}(${argumentList})`
+		wrappers.push(`${exportKeyword ?? ""}function ${functionName}(${parameterNames.map((name) => `${name}: any`).join(", ")}): any {
+	if (!__instrument.isRecording) { ${fastPath} }
+	return __instrument.callWhileRecording(${JSON.stringify(functionName)}, ${JSON.stringify(parameterNames)}, [${argumentList}], ${untraced}, ${functionName}, ${CACHED_FUNCTIONS.has(functionName)})
+}`)
+		return `function ${untraced}(${parameters})`
 	})
 	return `declare const __instrument: any\n${renamedSource}\n${wrappers.join("\n")}\n`
 }
