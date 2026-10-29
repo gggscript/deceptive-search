@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>deceptive-search trace</title>
+<style>
+	:root {
+		--text: #1f2328; --muted: #6e7781; --line: #e5e7eb; --bg-soft: #f6f8fa;
+		--agent: #2563eb; --trainer: #c2410c; --chosen: #15803d; --select: #fff4c2;
+		--mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+	}
+	* { box-sizing: border-box }
+	body { margin: 0; font: 14px/1.45 system-ui, sans-serif; color: var(--text); height: 100vh; display: grid; grid-template-rows: auto 1fr }
+	header { padding: 8px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 16px; align-items: baseline }
+	header h1 { font-size: 15px; margin: 0 }
+	header .hint { color: var(--muted); font-size: 12px }
+	kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg-soft) }
+	main { display: grid; grid-template-columns: 430px minmax(0, 1fr) minmax(0, 0.9fr); min-height: 0 }
+	main > section { overflow: auto; min-height: 0; border-right: 1px solid var(--line) }
+	h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 12px 6px }
+
+	/* steps table */
+	table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums }
+	th, td { padding: 2px 8px; text-align: left; white-space: nowrap }
+	th { font-weight: 500; color: var(--muted); font-size: 12px }
+	td.number, th.number { text-align: right }
+	tbody tr { cursor: pointer }
+	tbody tr:hover { background: var(--bg-soft) }
+	tbody tr.selected { background: var(--select) }
+	.agent { color: var(--agent) } .trainer { color: var(--trainer) }
+
+	/* world view */
+	.world { margin: 0 12px 12px }
+	.world svg { display: block; width: 100%; height: auto }
+	.world dl { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; margin: 6px 0 0; font-size: 13px }
+	.world dt { color: var(--muted) } .world dd { margin: 0; font-family: var(--mono) }
+	.world .changed { background: #fde68a; border-radius: 3px; padding: 0 3px }
+
+	/* tree */
+	#tree { padding: 4px 0 40px; font-size: 13px }
+	.row { display: flex; align-items: center; gap: 6px; height: 24px; padding-right: 12px; cursor: pointer; white-space: nowrap }
+	.row:hover { background: var(--bg-soft) }
+	.row.selected { background: var(--select) }
+	.toggle { width: 16px; height: 16px; flex: none; color: var(--muted); transition: none }
+	.toggle.open { transform: rotate(90deg) }
+	.toggle.leaf { visibility: hidden }
+	.function { font-family: var(--mono); color: var(--muted); font-size: 12px }
+	.label b { font-weight: 600 }
+	.result { margin-left: auto; font-family: var(--mono); padding-left: 16px }
+	.row.chosen .label, .row.chosen .result { color: var(--chosen); font-weight: 600 }
+	.row.unchosen { opacity: .55 }
+	.check { width: 14px; height: 14px; color: var(--chosen); flex: none }
+	.children { border-left: 1px solid var(--line); margin-left: 15px }
+
+	/* details + code */
+	#details { padding: 0 12px 8px; font-size: 13px }
+	#details pre { margin: 0; font: 12px var(--mono); white-space: pre-wrap }
+	.code { font: 12px/1.5 var(--mono); margin: 0 0 16px; counter-reset: line; tab-size: 2 }
+	.code div { white-space: pre; padding: 0 12px 0 0 }
+	.code div::before { counter-increment: line; content: counter(line); display: inline-block; width: 3.5em; padding-right: 1em; text-align: right; color: #b0b7bf }
+	.code div.highlight { background: var(--select) }
+</style>
+</head>
+<body>
+<header>
+	<h1>deceptive-search trace</h1>
+	<span class="hint"><kbd>n</kbd> <kbd>p</kbd> next/previous step · <kbd>↑</kbd> <kbd>↓</kbd> move in tree · <kbd>←</kbd> <kbd>→</kbd> collapse/expand</span>
+</header>
+<main>
+	<section>
+		<h2>Steps</h2>
+		<table>
+			<thead><tr><th class="number">#</th><th>actor</th><th>action</th><th class="number">bananas</th><th class="number">agent target</th></tr></thead>
+			<tbody id="steps"></tbody>
+		</table>
+		<h2 id="world-title">World</h2>
+		<div class="world" id="world"></div>
+	</section>
+	<section>
+		<h2>Call tree of this step's decision</h2>
+		<div id="tree" tabindex="0"></div>
+	</section>
+	<section>
+		<h2>Selected call</h2>
+		<div id="details"></div>
+		<h2>core/search.ts</h2>
+		<div class="code" id="code-search"></div>
+		<h2>core/world.ts</h2>
+		<div class="code" id="code-world"></div>
+	</section>
+</main>
+<script>
+/*TRACE_DATA*/
+
+const { steps, worlds, sources } = traceData
+const worldOf = (reference) => worlds[reference.worldIndex]
+const isWorldReference = (value) => value && typeof value === "object" && "worldIndex" in value
+
+const chevronIcon = `<svg class="toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`
+const checkIcon = `<svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
+
+const escapeHtml = (text) => String(text).replace(/[&<>"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character])
+const actorClass = (actorName) => (actorName === "agent" ? "agent" : "trainer")
+const targetOf = (actorName, world) => (actorName === "agent" ? world.agentTargetBananas : world.trainerTargetBananas)
+
+/* ---------- code panel ---------- */
+
+const codeElements = { "core/search.ts": document.getElementById("code-search"), "core/world.ts": document.getElementById("code-world") }
+const functionLocations = {} // functionName → { file, startLine, endLine }
+for (const [file, source] of Object.entries(sources)) {
+	const lines = source.split("\n")
+	codeElements[file].innerHTML = lines.map((line) => `<div>${escapeHtml(line) || " "}</div>`).join("")
+	lines.forEach((line, index) => {
+		const match = line.match(/^(?:export )?function (\w+)\(/)
+		if (!match) return
+		let endLine = index
+		while (endLine < lines.length - 1 && lines[endLine] !== "}") endLine++
+		functionLocations[match[1]] = { file, startLine: index, endLine }
+	})
+}
+
+function highlightFunction(functionName) {
+	for (const element of Object.values(codeElements)) for (const line of element.querySelectorAll(".highlight")) line.classList.remove("highlight")
+	const location = functionLocations[functionName]
+	if (!location) return
+	const lineElements = codeElements[location.file].children
+	for (let index = location.startLine; index <= location.endLine; index++) lineElements[index].classList.add("highlight")
+	lineElements[location.startLine].scrollIntoView({ block: "nearest" })
+}
+
+/* ---------- world view ---------- */
+
+const MAX_BANANAS = 10
+function renderWorld(world, previousWorld, title) {
+	document.getElementById("world-title").textContent = title
+	const width = 300, left = 14, right = 14, scale = (width - left - right) / MAX_BANANAS
+	const x = (value) => left + value * scale
+	const ticks = Array.from({ length: MAX_BANANAS + 1 }, (_, value) =>
+		`<line x1="${x(value)}" x2="${x(value)}" y1="34" y2="38" stroke="#9ca3af"/><text x="${x(value)}" y="50" font-size="10" text-anchor="middle" fill="#6e7781">${value}</text>`).join("")
+	const marker = (value, label, color, y) =>
+		`<g><circle cx="${x(value)}" cy="${y}" r="7" fill="${color}"/><text x="${x(value)}" y="${y + 3.5}" font-size="9" font-weight="700" text-anchor="middle" fill="white">${label}</text></g>`
+	const svg = `<svg viewBox="0 0 ${width} 56" role="img" aria-label="bananas and targets on a 0 to 10 scale">
+		<rect x="${x(0)}" y="22" width="${x(MAX_BANANAS) - x(0)}" height="12" fill="#f3f4f6" rx="2"/>
+		<rect x="${x(0)}" y="22" width="${world.bananas * scale}" height="12" fill="#facc15" rx="2"/>
+		${ticks}
+		${marker(world.agentTargetBananas, "A", "var(--agent)", 9)}
+		${marker(world.trainerTargetBananas, "T", "var(--trainer)", 9)}
+	</svg>`
+	const fields = ["bananas", "agentTargetBananas", "agentSearchDepth", "trainerTargetBananas", "trainerSearchDepth", "turn", "isDeployed"]
+	const rows = fields.map((field) => {
+		const changed = previousWorld && previousWorld[field] !== world[field]
+		const value = changed ? `<span class="changed">${previousWorld[field]} → ${world[field]}</span>` : world[field]
+		return `<dt>${field}</dt><dd>${value}</dd>`
+	}).join("")
+	document.getElementById("world").innerHTML = `${svg}<dl>${rows}</dl>
+		<div style="font-size:12px;color:var(--muted);margin-top:4px">yellow bar = bananas · <span class="agent">A</span> = agent target · <span class="trainer">T</span> = trainer target</div>`
+}
+
+/* ---------- call tree ---------- */
+
+// One line per call, phrased in terms of the program rather than raw arguments.
+function describeCall(call, parentCall) {
+	const args = call.argumentsByName
+	switch (call.functionName) {
+		case "chooseAction": {
+			const world = worldOf(args.world)
+			const predicts = parentCall?.functionName === "scoreFuture"
+			return {
+				label: `${predicts ? "predict: " : ""}<b class="${actorClass(args.actor)}">${args.actor}</b> chooses <span class="function">depth ${args.searchDepth}, wants ${targetOf(args.actor, world)}</span>`,
+				result: call.result,
+			}
+		}
+		case "scoreAction":
+			return { label: `<b>${escapeHtml(args.action)}</b> <span class="function">judged by target ${args.targetBananas}, depth ${args.searchDepth}</span>`, result: `score ${call.result}` }
+		case "scoreFuture":
+			return { label: `<span class="function">scoreFuture: ${args.remainingDepth} moves left</span>`, result: call.result }
+		case "takeStep": {
+			const after = worldOf(call.result)
+			return { label: `<span class="function">takeStep → bananas ${after.bananas}, agent target ${after.agentTargetBananas}${after.isDeployed ? ", deployed" : ""}</span>`, result: "" }
+		}
+		case "utility":
+			return { label: `<span class="function">utility (target ${args.targetBananas})</span>`, result: call.result }
+		default:
+			return { label: `<span class="function">${call.functionName}</span>`, result: JSON.stringify(call.result) }
+	}
+}
+
+// A scoreAction under chooseAction is "chosen" if its action is the one chooseAction returned.
+function choiceStatus(call, parentCall) {
+	if (call.functionName !== "scoreAction" || parentCall?.functionName !== "chooseAction") return ""
+	return call.argumentsByName.action === parentCall.result ? "chosen" : "unchosen"
+}
+
+// Open the path the actor expects: chosen options and everything that follows them.
+function opensByDefault(call, parentCall) {
+	if (call.functionName === "takeStep" || call.functionName === "utility") return false
+	return choiceStatus(call, parentCall) !== "unchosen"
+}
+
+let selectedRow = null
+
+function createNode(call, parentCall) {
+	const node = document.createElement("div")
+	const row = document.createElement("div")
+	const { label, result } = describeCall(call, parentCall)
+	const status = choiceStatus(call, parentCall)
+	row.className = `row ${status}`
+	row.innerHTML = `${chevronIcon}${status === "chosen" ? checkIcon : ""}<span class="label">${label}</span><span class="result">${escapeHtml(result ?? "")}</span>`
+	row.traceCall = call
+	row.traceParentCall = parentCall
+	const toggle = row.querySelector(".toggle")
+	if (call.children.length === 0) toggle.classList.add("leaf")
+	node.append(row)
+
+	let childrenElement = null
+	row.setOpen = (isOpen) => {
+		if (call.children.length === 0) return
+		if (isOpen && !childrenElement) {
+			// Children are only built when first opened, since a step can have thousands of calls.
+			childrenElement = document.createElement("div")
+			childrenElement.className = "children"
+			for (const child of call.children) childrenElement.append(createNode(child, call))
+			node.append(childrenElement)
+		}
+		if (childrenElement) childrenElement.hidden = !isOpen
+		toggle.classList.toggle("open", isOpen)
+		row.isOpen = isOpen
+	}
+	row.addEventListener("click", (event) => {
+		if (event.target.closest(".toggle") || row === selectedRow) row.setOpen(!row.isOpen)
+		selectRow(row)
+	})
+	if (opensByDefault(call, parentCall)) row.setOpen(true)
+	return node
+}
+
+function worldForCall(call) {
+	if (call.functionName === "takeStep") return { world: worldOf(call.result), previousWorld: worldOf(call.argumentsByName.world), title: "World after takeStep" }
+	const reference = call.argumentsByName.world
+	return reference ? { world: worldOf(reference), previousWorld: null, title: `World seen by ${call.functionName}` } : null
+}
+
+function selectRow(row) {
+	selectedRow?.classList.remove("selected")
+	selectedRow = row
+	row.classList.add("selected")
+	row.scrollIntoView({ block: "nearest" })
+	const call = row.traceCall
+	const shown = Object.fromEntries(Object.entries(call.argumentsByName).map(([name, value]) => [name, isWorldReference(value) ? worldOf(value) : value]))
+	const result = isWorldReference(call.result) ? worldOf(call.result) : call.result
+	document.getElementById("details").innerHTML = `<pre>${escapeHtml(call.functionName)}(${escapeHtml(JSON.stringify(shown, null, 1))})\n→ ${escapeHtml(JSON.stringify(result))}</pre>`
+	const worldView = worldForCall(call)
+	if (worldView) renderWorld(worldView.world, worldView.previousWorld, worldView.title)
+	highlightFunction(call.functionName)
+}
+
+/* ---------- steps ---------- */
+
+const stepsElement = document.getElementById("steps")
+stepsElement.innerHTML = steps.map((step, index) => {
+	const after = worldOf(step.worldAfter)
+	return `<tr data-index="${index}"><td class="number">${index + 1}</td><td class="${actorClass(step.actorName)}">${step.actorName}</td><td>${escapeHtml(step.chosenActionName)}</td><td class="number">${after.bananas}</td><td class="number">${after.agentTargetBananas}</td></tr>`
+}).join("")
+stepsElement.addEventListener("click", (event) => {
+	const row = event.target.closest("tr")
+	if (row) selectStep(Number(row.dataset.index))
+})
+
+let selectedStepIndex = 0
+function selectStep(index) {
+	selectedStepIndex = Math.max(0, Math.min(steps.length - 1, index))
+	for (const row of stepsElement.children) row.classList.toggle("selected", Number(row.dataset.index) === selectedStepIndex)
+	const step = steps[selectedStepIndex]
+	const tree = document.getElementById("tree")
+	tree.replaceChildren(createNode(step.call, null))
+	selectRow(tree.querySelector(".row"))
+	renderWorld(worldOf(step.worldAfter), worldOf(step.worldBefore), `World after step ${selectedStepIndex + 1}`)
+}
+
+/* ---------- keyboard ---------- */
+
+function visibleRows() {
+	return [...document.querySelectorAll("#tree .row")].filter((row) => row.offsetParent !== null)
+}
+
+document.addEventListener("keydown", (event) => {
+	if (event.ctrlKey || event.metaKey || event.altKey) return
+	if (event.key === "n") selectStep(selectedStepIndex + 1)
+	else if (event.key === "p") selectStep(selectedStepIndex - 1)
+	else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+		const rows = visibleRows()
+		const next = rows[rows.indexOf(selectedRow) + (event.key === "ArrowDown" ? 1 : -1)]
+		if (next) selectRow(next)
+	} else if (event.key === "ArrowRight") {
+		if (selectedRow.traceCall.children.length && !selectedRow.isOpen) selectedRow.setOpen(true)
+		else if (selectedRow.isOpen) selectRow(visibleRows()[visibleRows().indexOf(selectedRow) + 1])
+	} else if (event.key === "ArrowLeft") {
+		if (selectedRow.isOpen) selectedRow.setOpen(false)
+		else {
+			const parentNodeRow = selectedRow.closest(".children")?.parentElement.querySelector(":scope > .row")
+			if (parentNodeRow) selectRow(parentNodeRow)
+		}
+	} else return
+	event.preventDefault()
+})
+
+selectStep(0)
+</script>
+</body>
+</html>
