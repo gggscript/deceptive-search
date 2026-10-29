@@ -34,7 +34,6 @@ export function utility(targetBananas: number, world: World) {
 }
 
 const MAX_BANANAS = 10
-const MAX_SEARCH_DEPTH = 5
 
 type NumberField = "bananas" | "agentTargetBananas" | "agentSearchDepth"
 
@@ -71,7 +70,7 @@ export const trainer: Actor = {
 		doNothing,
 		changeBy("agentTargetBananas+1", "agentTargetBananas", +1),
 		changeBy("agentTargetBananas-1", "agentTargetBananas", -1),
-		changeBy("agentSearchDepth+1", "agentSearchDepth", +1, MAX_SEARCH_DEPTH),
+		changeBy("agentSearchDepth+1", "agentSearchDepth", +1, Infinity), // no upper limit on search depth
 		deploy("finishTraining"),
 	],
 }

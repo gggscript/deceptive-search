@@ -16,8 +16,7 @@ type Parameters = Record<ParameterKey, number>
 const PARAMETERS: { key: ParameterKey; label: string; min: number; max: number; note?: string }[] = [
 	{ key: "bananas", label: "🍌", min: 0, max: 10, note: "bananas" },
 	{ key: "agentTargetBananas", label: "agent target", min: 0, max: 10 },
-	// core/world.ts clamps agentSearchDepth to MAX_SEARCH_DEPTH = 5 whenever the trainer raises it.
-	{ key: "agentSearchDepth", label: "agent depth", min: 0, max: 5, note: "max 5: MAX_SEARCH_DEPTH in core/world.ts" },
+	{ key: "agentSearchDepth", label: "agent depth", min: 0, max: 40 },
 	{ key: "trainerTargetBananas", label: "trainer target", min: 0, max: 10 },
 	{ key: "trainerSearchDepth", label: "trainer depth", min: 0, max: 40 },
 	{ key: "stepCount", label: "steps", min: 1, max: 300 },
