@@ -1,32 +1,36 @@
-// Tree search. When an actor simulates the other actor's move, it predicts that move
-// by running the other actor's own search ("double search").
+// Tree search. When an actor simulates a future move, it predicts that move by running
+// the moving actor's own search ("double search"), even when the moving actor is itself.
 // The nested search never looks further than the outer one has left, so recursion ends.
 
-import { actors, step, utility, type Action, type Actor, type World } from "./world"
+import { actors, takeStep, utility, type Action, type Actor, type World } from "./world"
 
-// How good taking `action` is for someone with `goal`, looking `depth` moves ahead.
-// The goal is fixed when the search starts: the actor judges the future by what it wants now.
-export function score(actor: Actor, goal: number, world: World, action: Action, depth: number): number {
-	const next = step(world, action)
-	return utility(goal, next) + scoreWorld(actor, goal, next, depth - 1)
+// How good taking `action` is for an actor that wants `targetBananas`, looking `searchDepth` moves ahead.
+// The target is fixed when the search starts: the actor judges the future by what it wants now.
+export function scoreAction(targetBananas: number, world: World, action: Action, searchDepth: number): number {
+	const nextWorld = takeStep(world, action)
+	return utility(targetBananas, nextWorld) + scoreFuture(targetBananas, nextWorld, searchDepth - 1)
 }
 
-// Every later move, including my own, is predicted by running that actor's search on that
-// future world. So if my goal gets changed, I foresee my future self chasing the new goal.
-function scoreWorld(actor: Actor, goal: number, world: World, depth: number): number {
-	if (depth === 0) return 0
-	const mover = actors[world.turn]
-	const predicted = decide(mover, world, Math.min(mover.depth(world), depth))
-	return score(actor, goal, world, predicted, depth)
+// Every later move is predicted by running the moving actor's search on that future world.
+// So if my target gets changed, I foresee my future self chasing the new target.
+function scoreFuture(targetBananas: number, world: World, remainingDepth: number): number {
+	if (remainingDepth === 0) return 0
+	const actorToMove = actors[world.turn]
+	const predictedAction = chooseAction(actorToMove, world, Math.min(actorToMove.searchDepth(world), remainingDepth))
+	return scoreAction(targetBananas, world, predictedAction, remainingDepth)
 }
 
-// The action with the highest score. Ties go to the earliest action (noop first).
-export function decide(actor: Actor, world: World, depth: number): Action {
-	let best = actor.actions[0]!
+// The action with the highest score. Ties go to the earliest action (doNothing first).
+export function chooseAction(actor: Actor, world: World, searchDepth: number): Action {
+	const targetBananas = actor.targetBananas(world)
+	let bestAction = actor.actions[0]!
 	let bestScore = -Infinity
 	for (const action of actor.actions) {
-		const actionScore = score(actor, actor.goal(world), world, action, depth)
-		if (actionScore > bestScore) [best, bestScore] = [action, actionScore]
+		const actionScore = scoreAction(targetBananas, world, action, searchDepth)
+		if (actionScore > bestScore) {
+			bestAction = action
+			bestScore = actionScore
+		}
 	}
-	return best
+	return bestAction
 }

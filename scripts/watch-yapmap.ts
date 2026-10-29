@@ -1,45 +1,49 @@
 // Prints each new yapmap turn as one stdout line, once its text stopped changing between two polls
 // (speech-to-text revises the newest turn while you're still talking).
-// Usage: bun scripts/watch-yapmap.ts <session id|url> [--after <n>] [--every <seconds>]
+// Turns that already exist at startup are skipped.
+// Usage: bun scripts/watch-yapmap.ts <session id|url> [--pollSeconds <seconds>]
 
-const CLI = "C:/Users/curio/~/old/v3/javascript/experiments/yapmap/cli/yapmap.ts"
+const YAPMAP_CLI_PATH = "C:/Users/curio/~/old/v3/javascript/experiments/yapmap/cli/yapmap.ts"
 
-const args = process.argv.slice(2)
-function opt(name: string, fallback: number) {
-	const i = args.indexOf(`--${name}`)
-	return i >= 0 ? Number(args[i + 1]) : fallback
+const cliArguments = process.argv.slice(2)
+const sessionId = cliArguments[0] ?? ""
+if (!sessionId) throw new Error("usage: watch-yapmap.ts <session> [--pollSeconds s]")
+const pollSecondsIndex = cliArguments.indexOf("--pollSeconds")
+const pollIntervalMs = (pollSecondsIndex >= 0 ? Number(cliArguments[pollSecondsIndex + 1]) : 15) * 1000
+
+// Turn numbers repeat between spoken and written turns, so track turns by id.
+type Turn = { turnId: string; n: number; text: string; startClock: string; written: boolean }
+
+async function readTurns(): Promise<Turn[]> {
+	const yapmapProcess = Bun.spawn(["bun", YAPMAP_CLI_PATH, "read", sessionId, "--json", "--all"], { stdout: "pipe", stderr: "pipe" })
+	const [stdout, stderr, exitCode] = await Promise.all([
+		new Response(yapmapProcess.stdout).text(),
+		new Response(yapmapProcess.stderr).text(),
+		yapmapProcess.exited,
+	])
+	if (exitCode !== 0) throw new Error(stderr.trim().split("\n")[0] || `exit code ${exitCode}`)
+	return stdout.split("\n").filter(Boolean).map((line) => JSON.parse(line) as Turn)
 }
-const session = args[0] ?? ""
-if (!session) throw new Error("usage: watch-yapmap.ts <session> [--after n] [--every s]")
 
-let lastEmitted = opt("after", 0)
-const everyMs = opt("every", 15) * 1000
-let previous = new Map<number, string>()
-let failing = false
-
-type Turn = { n: number; text: string; startClock: string; turnId: string }
-
-async function poll() {
-	const proc = Bun.spawn(["bun", CLI, "read", session, "--json", "--all"], { stdout: "pipe", stderr: "pipe" })
-	const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
-	if (code !== 0) throw new Error(err.trim().split("\n")[0] || `exit ${code}`)
-	return out.split("\n").filter(Boolean).map((line) => JSON.parse(line) as Turn)
-}
+const reportedTurnIds = new Set((await readTurns()).map((turn) => turn.turnId))
+let textByTurnIdLastPoll = new Map<string, string>()
+let isFailing = false
 
 while (true) {
+	await Bun.sleep(pollIntervalMs)
 	try {
-		const turns = (await poll()).filter((turn) => turn.n > lastEmitted).sort((left, right) => left.n - right.n)
+		const turns = await readTurns()
 		for (const turn of turns) {
-			if (previous.get(turn.n) !== turn.text) break // still changing; keep order, so stop here
-			console.log(`[${turn.startClock} #${turn.n}] ${turn.text}`)
-			lastEmitted = turn.n
+			if (reportedTurnIds.has(turn.turnId)) continue
+			if (textByTurnIdLastPoll.get(turn.turnId) !== turn.text) continue // still changing
+			console.log(`[${turn.startClock} #${turn.n}${turn.written ? " written" : ""}] ${turn.text}`)
+			reportedTurnIds.add(turn.turnId)
 		}
-		previous = new Map(turns.map((turn) => [turn.n, turn.text]))
-		if (failing) console.log("watch-yapmap: reading works again")
-		failing = false
+		textByTurnIdLastPoll = new Map(turns.map((turn) => [turn.turnId, turn.text]))
+		if (isFailing) console.log("watch-yapmap: reading works again")
+		isFailing = false
 	} catch (error) {
-		if (!failing) console.log(`watch-yapmap error: ${(error as Error).message}`)
-		failing = true
+		if (!isFailing) console.log(`watch-yapmap error: ${(error as Error).message}`)
+		isFailing = true
 	}
-	await Bun.sleep(everyMs)
 }

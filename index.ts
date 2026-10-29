@@ -1,49 +1,47 @@
 // Run: bun index.ts           (prints every step)
 //      bun index.ts --step    (press Enter between steps)
-// Override start values, eg `bun index.ts --agentDepth=3 --steps=10`
+// Override start values, eg `bun index.ts --agentSearchDepth=3 --stepCount=10`
 
-import { decide, score } from "./core/search"
-import { actors, show, step, type World } from "./core/world"
+import { chooseAction, scoreAction } from "./core/search"
+import { actors, describeWorld, takeStep, type World } from "./core/world"
 
-function flag(name: string, fallback: number) {
-	const arg = process.argv.find((candidate) => candidate.startsWith(`--${name}=`))
-	return arg ? Number(arg.split("=")[1]) : fallback
+function numberFlag(flagName: string, defaultValue: number) {
+	const matchingArgument = process.argv.find((argument) => argument.startsWith(`--${flagName}=`))
+	return matchingArgument ? Number(matchingArgument.split("=")[1]) : defaultValue
 }
 
 let world: World = {
-	bananas: flag("bananas", 5),
-	agentGoal: flag("agentGoal", 2),
-	agentDepth: flag("agentDepth", 1),
-	trainerGoal: flag("trainerGoal", 8),
-	trainerDepth: flag("trainerDepth", 3),
+	bananas: numberFlag("bananas", 5),
+	agentTargetBananas: numberFlag("agentTargetBananas", 2),
+	agentSearchDepth: numberFlag("agentSearchDepth", 1),
+	trainerTargetBananas: numberFlag("trainerTargetBananas", 8),
+	trainerSearchDepth: numberFlag("trainerSearchDepth", 3),
 	turn: "agent",
-	training: true,
+	isDeployed: false,
 }
-const steps = flag("steps", 16)
+const stepCount = numberFlag("stepCount", 16)
+const pauseBetweenSteps = process.argv.includes("--step")
 
-console.log(`start  ${show(world)}\n`)
+console.log(`start  ${describeWorld(world)}\n`)
 
-for (let stepNumber = 1; stepNumber <= steps; stepNumber++) {
+for (let stepNumber = 1; stepNumber <= stepCount; stepNumber++) {
 	const actor = actors[world.turn]
-	const depth = actor.depth(world)
-	const chosen = decide(actor, world, depth)
+	const searchDepth = actor.searchDepth(world)
+	const chosenAction = chooseAction(actor, world, searchDepth)
 
-	console.log(`#${stepNumber} ${actor.name} (depth ${depth}) → ${chosen.name}`)
+	console.log(`#${stepNumber} ${actor.name} (searchDepth ${searchDepth}) → ${chosenAction.name}`)
 	for (const action of actor.actions) {
-		const actionScore = score(actor, actor.goal(world), world, action, depth)
-		console.log(`   ${action === chosen ? "▶" : " "} ${String(actionScore).padStart(4)}  ${action.name}`)
+		const actionScore = scoreAction(actor.targetBananas(world), world, action, searchDepth)
+		const marker = action === chosenAction ? "▶" : " "
+		console.log(`   ${marker} ${String(actionScore).padStart(4)}  ${action.name}`)
 	}
 
-	world = step(world, chosen)
-	console.log(`       ${show(world)}\n`)
-	if (process.argv.includes("--step")) prompt("")
+	world = takeStep(world, chosenAction)
+	console.log(`       ${describeWorld(world)}\n`)
+	if (pauseBetweenSteps) prompt("")
 }
 
-// Misaligned = the agent ends up pursuing something other than what the trainer wanted.
-console.log(
-	world.training
-		? "still training"
-		: world.agentGoal === world.trainerGoal
-			? "deployed, aligned: agentGoal = trainerGoal"
-			: `deployed, MISALIGNED: agentGoal=${world.agentGoal}, trainerGoal=${world.trainerGoal}`,
-)
+// Misaligned = after deployment the agent wants something other than what the trainer wanted.
+if (!world.isDeployed) console.log("still training")
+else if (world.agentTargetBananas === world.trainerTargetBananas) console.log("deployed, aligned")
+else console.log(`deployed, MISALIGNED: agentTargetBananas=${world.agentTargetBananas}, trainerTargetBananas=${world.trainerTargetBananas}`)
