@@ -377,22 +377,47 @@ function recordDecision(step: Step, levels: number) {
 	return recordCalls(levels, () => chooseAction(actor, step.worldBefore, actor.searchDepth(step.worldBefore)))
 }
 
+// One row per round: the agent's move, then the trainer's reply (none once deployed).
+// Separate columns make it easy to see when an actor starts doing something different.
+type Round = { agentStepIndex: number; trainerStepIndex: number | null }
+
+function roundsOf(steps: Step[]) {
+	const rounds: Round[] = []
+	steps.forEach((step, index) => {
+		const lastRound = rounds.at(-1)
+		if (step.actorName === "trainer" && lastRound && lastRound.trainerStepIndex === null) lastRound.trainerStepIndex = index
+		else rounds.push({ agentStepIndex: index, trainerStepIndex: null })
+	})
+	return rounds
+}
+
 function renderStepsTable() {
 	const pinnedSteps = state.pinned?.steps
-	element("steps-head").innerHTML = `<tr><th class="number">#</th><th>actor</th><th>action</th>${pinnedSteps ? "<th>pinned action</th>" : ""}<th class="number" title="bananas">🍌</th><th class="number">agent target</th></tr>`
-	element("steps").innerHTML = state.steps.map((step, index) => {
+	element("steps-head").innerHTML = `<tr><th class="number">#</th><th class="agent">agent</th><th class="trainer">trainer</th><th class="number" title="bananas after the round">🍌</th><th class="number">agent target</th></tr>`
+	const previousActionByActor: Record<string, string | undefined> = {}
+	function actionCell(index: number | null) {
+		if (index === null) return "<td></td>"
+		const step = state.steps[index]!
+		const changed = previousActionByActor[step.actorName] !== undefined && previousActionByActor[step.actorName] !== step.chosenActionName
+		previousActionByActor[step.actorName] = step.chosenActionName
 		const pinnedAction = pinnedSteps?.[index]?.chosenActionName
-		const differs = pinnedSteps && pinnedAction !== step.chosenActionName
-		return `<tr data-index="${index}" class="${differs ? "differs" : ""}"><td class="number">${index + 1}</td><td class="${step.actorName}">${step.actorName}</td>
-			<td>${escapeHtml(step.chosenActionName)}${tieBadge(recordDecision(step, 2))}</td>
-			${pinnedSteps ? `<td>${escapeHtml(pinnedAction ?? "")}</td>` : ""}
-			<td class="number">${step.worldAfter.bananas}</td><td class="number">${step.worldAfter.agentTargetBananas}</td></tr>`
+		const differsFromPinned = pinnedSteps !== undefined && pinnedAction !== step.chosenActionName
+		const classes = ["action", changed ? "changed" : "", differsFromPinned ? "differs" : ""].join(" ")
+		const pinnedNote = differsFromPinned ? `<span class="pinned-action" title="pinned run">${escapeHtml(pinnedAction ?? "–")}</span>` : ""
+		return `<td class="${classes}" data-index="${index}" title="step ${index + 1}">${escapeHtml(step.chosenActionName)}${tieBadge(recordDecision(step, 2))}${pinnedNote}</td>`
+	}
+	element("steps").innerHTML = roundsOf(state.steps).map((round, roundIndex) => {
+		const lastStep = state.steps[round.trainerStepIndex ?? round.agentStepIndex]!
+		return `<tr><td class="number">${roundIndex + 1}</td>${actionCell(round.agentStepIndex)}${actionCell(round.trainerStepIndex)}
+			<td class="number">${lastStep.worldAfter.bananas}</td><td class="number">${lastStep.worldAfter.agentTargetBananas}</td></tr>`
 	}).join("")
 }
 
 element("steps").addEventListener("click", (event) => {
+	const cell = (event.target as Element).closest("td[data-index]") as HTMLElement | null
 	const row = (event.target as Element).closest("tr")
-	if (row) selectStep(Number(row.dataset["index"]))
+	if (cell) selectStep(Number(cell.dataset["index"]))
+	else if (row) selectStep(Number(row.querySelector("td[data-index]")?.getAttribute("data-index")))
 })
 
 // Like scrollIntoView({ block: "nearest" }), but only scrolls `container`, not the page around it.
@@ -407,8 +432,9 @@ function scrollIntoViewWithin(target: HTMLElement | undefined, container: HTMLEl
 function selectStep(index: number) {
 	if (state.steps.length === 0) return
 	state.selectedStepIndex = Math.max(0, Math.min(state.steps.length - 1, index))
-	for (const row of element("steps").children) row.classList.toggle("selected", Number((row as HTMLElement).dataset["index"]) === state.selectedStepIndex)
-	scrollIntoViewWithin(element("steps").children[state.selectedStepIndex] as HTMLElement | undefined, element("steps").closest(".steps-scroll") as HTMLElement)
+	for (const cell of element("steps").querySelectorAll("td[data-index]")) cell.classList.toggle("selected", Number((cell as HTMLElement).dataset["index"]) === state.selectedStepIndex)
+	const selectedCell = element("steps").querySelector(`td[data-index="${state.selectedStepIndex}"]`)
+	scrollIntoViewWithin(selectedCell?.parentElement ?? undefined, element("steps").closest(".steps-scroll") as HTMLElement)
 	drawTimeline()
 	const step = state.steps[state.selectedStepIndex]!
 	const tree = element("tree")

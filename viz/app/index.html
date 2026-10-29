@@ -46,9 +46,14 @@
 	th, td { padding: 1px 8px; text-align: left; white-space: nowrap }
 	th { font-weight: 500; color: var(--muted); font-size: 12px; position: sticky; top: 0; background: white }
 	td.number, th.number { text-align: right }
-	tbody tr { cursor: pointer } tbody tr:hover { background: var(--bg-soft) }
-	tbody tr.selected { background: var(--select) }
-	tbody tr.differs td:nth-child(3), tbody tr.differs td:nth-child(4) { font-weight: 600 }
+	tbody tr:hover { background: var(--bg-soft) }
+	tbody td.action { cursor: pointer }
+	tbody td.action:hover { background: #eef0f2 }
+	tbody td.selected, tbody td.selected:hover { background: var(--select) }
+	/* the actor does something different than its previous move */
+	tbody td.changed { box-shadow: inset 3px 0 0 #8250df }
+	tbody td.differs { font-weight: 600 }
+	.pinned-action { margin-left: 6px; font-size: 11px; color: var(--muted); font-weight: 400; text-decoration: line-through }
 	.steps-scroll { position: relative; max-height: 260px; overflow: auto; margin: 0 12px; border: 1px solid var(--line); border-radius: 6px }
 	#pinned-note { font-size: 12px; margin: 4px 12px }
 	.tie { font-size: 11px; color: #7d4e00; background: #fff8c5; border: 1px solid #eac54f; border-radius: 3px; padding: 0 4px; margin-left: 6px; font-weight: 500 }
@@ -104,6 +109,15 @@
 </header>
 <main>
 	<section>
+		<h2>This run</h2>
+		<div class="panel" id="timeline"></div>
+		<div id="pinned-note"></div>
+		<div class="panel muted small" style="margin-bottom:4px">one row per round · <span style="box-shadow: inset 3px 0 0 #8250df; padding-left: 6px">marked</span> = different action than that actor's previous move · click an action to inspect it</div>
+		<div class="steps-scroll">
+			<table><thead id="steps-head"></thead><tbody id="steps"></tbody></table>
+		</div>
+		<h2 id="world-title">World</h2>
+		<div class="panel world" id="world"></div>
 		<h2>Outcome across parameters</h2>
 		<div class="panel">
 			<div id="sweep-controls"></div>
@@ -116,14 +130,6 @@
 			<div id="sweep"></div>
 			<div id="sweep-status" class="muted small"></div>
 		</div>
-		<h2>This run</h2>
-		<div class="panel" id="timeline"></div>
-		<div id="pinned-note"></div>
-		<div class="steps-scroll">
-			<table><thead id="steps-head"></thead><tbody id="steps"></tbody></table>
-		</div>
-		<h2 id="world-title">World</h2>
-		<div class="panel world" id="world"></div>
 	</section>
 	<section>
 		<h2 class="with-control">Decision of the selected step <label><input type="checkbox" id="show-all-calls"> show all calls</label></h2>
