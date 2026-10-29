@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tree search with nested searches</title>
+<style>
+	:root { --text: #1f2328; --muted: #6e7781; --line: #d0d7de; --agent: #2a78d6; --trainer: #eb6834; --chosen: #15803d }
+	body { margin: 0; font: 15px/1.5 system-ui, sans-serif; color: var(--text) }
+	main { max-width: 1180px; margin: 0 auto; padding: 24px }
+	h1 { font-size: 22px; margin: 0 0 4px }
+	.lead { color: var(--muted); margin: 0 0 16px; max-width: 760px }
+	.controls { display: flex; gap: 28px; align-items: center; margin-bottom: 16px; font-size: 14px }
+	.controls label { display: flex; align-items: center; gap: 8px }
+	.controls output { font-family: ui-monospace, Consolas, monospace; min-width: 1.5em }
+	.agent { color: var(--agent); font-weight: 600 } .trainer { color: var(--trainer); font-weight: 600 }
+	.panels { display: grid; grid-template-columns: 300px 1fr; gap: 32px; align-items: start }
+	h2 { font-size: 15px; margin: 0 0 2px }
+	.caption { color: var(--muted); font-size: 13px; margin: 0 0 8px }
+	.count { font-family: ui-monospace, Consolas, monospace; font-size: 13px; margin-top: 6px }
+	svg text { font: 12px system-ui, sans-serif; fill: var(--text) }
+	svg .small { font-size: 11px; fill: var(--muted) }
+	.legend { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin-bottom: 8px }
+	.legend i { display: inline-block; width: 18px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px }
+</style>
+</head>
+<body>
+<main>
+	<h1>It's not one game tree: it's a search made of searches</h1>
+	<p class="lead">To decide, an actor tries each of its options once. After that it doesn't branch: it predicts each later move,
+		its own included, by running <i>that actor's own</i> search, which is the same thing again, only shallower.</p>
+
+	<div class="controls">
+		<label><span class="agent">agent</span> depth <input id="agent-depth" type="range" min="1" max="4" value="3"><output id="agent-depth-value"></output></label>
+		<label><span class="trainer">trainer</span> depth <input id="trainer-depth" type="range" min="1" max="4" value="3"><output id="trainer-depth-value"></output></label>
+	</div>
+	<div class="legend">
+		<span><i style="background: var(--agent)"></i>agent's move</span>
+		<span><i style="background: var(--trainer)"></i>trainer's move</span>
+		<span><i style="background: var(--chosen)"></i>best option</span>
+		<span><i style="background: repeating-linear-gradient(90deg, var(--muted) 0 4px, transparent 4px 7px)"></i>"predicted by running this search"</span>
+	</div>
+
+	<div class="panels">
+		<section>
+			<h2>Ordinary game-tree search</h2>
+			<p class="caption">e.g. tic-tac-toe minimax: every move branches</p>
+			<svg id="ordinary"></svg>
+			<div class="count" id="ordinary-count"></div>
+		</section>
+		<section>
+			<h2>This program</h2>
+			<p class="caption">the root branches, every later move is one predicted move; each prediction is its own, shallower search (drawn below it)</p>
+			<svg id="nested"></svg>
+			<div class="count" id="nested-count"></div>
+		</section>
+	</div>
+</main>
+
+<script>
+	const OPTIONS = 3 // branches per decision; the real program has 5–6
+	const MOVE_WIDTH = 92
+	const COLORS = { agent: "var(--agent)", trainer: "var(--trainer)" }
+	const other = (actor) => (actor === "agent" ? "trainer" : "agent")
+
+	function line(x1, y1, x2, y2, color, width, extra = "") {
+		return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${width}" stroke-linecap="round" ${extra}/>`
+	}
+	function node(x, y, radius = 4.5) {
+		return `<circle cx="${x}" cy="${y}" r="${radius}" fill="white" stroke="#57606a" stroke-width="1.5"/>`
+	}
+
+	/* ---------- ordinary tree: every move branches ---------- */
+
+	function drawOrdinary(depth) {
+		const leafSpacing = depth >= 4 ? 5 : depth === 3 ? 12 : 26
+		const leafCount = OPTIONS ** depth
+		const height = leafCount * leafSpacing + 20
+		const moveWidth = 64
+		let svg = ""
+		let leafIndex = 0
+		// Returns the y of the subtree's root.
+		function draw(x, level, actor) {
+			if (level === depth) return 10 + leafSpacing * (leafIndex++ + 0.5)
+			const childYs = []
+			for (let option = 0; option < OPTIONS; option++) childYs.push(draw(x + moveWidth, level + 1, other(actor)))
+			const y = (childYs[0] + childYs.at(-1)) / 2
+			for (const childY of childYs) svg += line(x, y, x + moveWidth, childY, COLORS[actor], 1.2)
+			return y
+		}
+		const rootY = draw(10, 0, "agent")
+		svg += node(10, rootY, 5)
+		const element = document.getElementById("ordinary")
+		element.setAttribute("viewBox", `0 0 ${10 + depth * moveWidth + 10} ${height}`)
+		element.setAttribute("width", 10 + depth * moveWidth + 10)
+		element.setAttribute("height", height)
+		element.innerHTML = svg
+		let count = 0
+		for (let level = 1; level <= depth; level++) count += OPTIONS ** level
+		document.getElementById("ordinary-count").textContent = `${count} positions looked at`
+	}
+
+	/* ---------- this program: branch once, then predict with nested searches ---------- */
+
+	// Positions looked at by one search of `depth` moves, without any caching.
+	function nestedCount(actor, depth, depths) {
+		let count = 0
+		for (let option = 0; option < OPTIONS; option++) {
+			count += 1
+			for (let move = 1; move < depth; move++) {
+				const mover = move % 2 === 1 ? other(actor) : actor
+				count += 1 + nestedCount(mover, Math.min(depths[mover], depth - move), depths)
+			}
+		}
+		return count
+	}
+
+	function drawNested(depths) {
+		let svg = ""
+		const fanSpacing = 22
+
+		// Draws the search `actor` runs with `depth` moves, root at (x, y). Returns the lowest y used.
+		function draw(x, y, actor, depth, isTop, depthNote = "") {
+			const chosen = 1 // middle option, for drawing only
+			let bottom = y + fanSpacing + 10
+			for (let option = 0; option < OPTIONS; option++) {
+				const optionY = y + (option - chosen) * fanSpacing
+				const isChosen = option === chosen
+				svg += line(x, y, x + MOVE_WIDTH, optionY, isChosen ? "var(--chosen)" : COLORS[actor], isChosen ? 3 : 1.5)
+				// the predicted line that follows this option
+				for (let move = 1; move < depth; move++) {
+					const mover = move % 2 === 1 ? other(actor) : actor
+					svg += line(x + MOVE_WIDTH * move, optionY, x + MOVE_WIDTH * (move + 1), optionY, COLORS[mover], isChosen ? 3 : 1.5, isChosen ? "" : 'opacity=".35"')
+				}
+				for (let move = 1; move <= depth; move++) svg += node(x + MOVE_WIDTH * move, optionY, isChosen ? 4.5 : 3.5)
+			}
+			svg += node(x, y, isTop ? 6 : 5)
+			const label = isTop ? `${actor} decides · depth ${depth}` : `${actor}'s own search · depth ${depth}${depthNote}`
+			svg += `<text x="${x - 6}" y="${y - fanSpacing - 12}" class="${isTop ? "" : "small"}">${label}</text>`
+
+			// Each predicted move on the best line is found by a nested search. Draw the last one first (topmost),
+			// so every connector passes left of the searches above it and nothing crosses.
+			for (let move = depth - 1; move >= 1; move--) {
+				const mover = move % 2 === 1 ? other(actor) : actor
+				const nestedDepth = Math.min(depths[mover], depth - move)
+				const connectorX = x + MOVE_WIDTH * (move + 0.5)
+				const nestedY = bottom + fanSpacing + 30
+				svg += line(connectorX, y, connectorX, nestedY, "#8c959f", 1.2, 'stroke-dasharray="3 4"')
+				const capped = depths[mover] < depth - move
+				const depthNote = ` = min(${mover} ${depths[mover]}, ${depth - move} left)${capped ? ": capped by its own depth" : ""}`
+				bottom = draw(connectorX, nestedY, mover, nestedDepth, false, depthNote)
+			}
+			return bottom
+		}
+
+		const rootY = 50
+		const bottom = draw(14, rootY, "agent", depths.agent, true)
+		const width = 14 + MOVE_WIDTH * (depths.agent + 0.5) + 260
+		const element = document.getElementById("nested")
+		element.setAttribute("viewBox", `0 0 ${width} ${bottom + 10}`)
+		element.setAttribute("width", width)
+		element.setAttribute("height", bottom + 10)
+		element.innerHTML = svg
+		document.getElementById("nested-count").textContent =
+			`${nestedCount("agent", depths.agent, depths)} positions looked at (drawn: only the best option's predictions; the real program does this for every option, and caches repeated searches)`
+	}
+
+	function render() {
+		const depths = { agent: Number(document.getElementById("agent-depth").value), trainer: Number(document.getElementById("trainer-depth").value) }
+		document.getElementById("agent-depth-value").textContent = depths.agent
+		document.getElementById("trainer-depth-value").textContent = depths.trainer
+		drawOrdinary(depths.agent)
+		drawNested(depths)
+	}
+	for (const id of ["agent-depth", "trainer-depth"]) document.getElementById(id).addEventListener("input", render)
+	render()
+</script>
+</body>
+</html>
