@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>deceptive-search</title>
+<style>
+	:root {
+		--text: #1f2328; --muted: #6e7781; --line: #e5e7eb; --bg-soft: #f6f8fa;
+		--agent: #2a78d6; --trainer: #c2410c; --chosen: #15803d; --select: #fff4c2;
+		--mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+	}
+	* { box-sizing: border-box }
+	body { margin: 0; font: 14px/1.45 system-ui, sans-serif; color: var(--text); height: 100vh; display: grid; grid-template-rows: auto 1fr }
+	header { padding: 8px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center }
+	header h1 { font-size: 15px; margin: 0 }
+	#parameters { display: flex; gap: 12px; flex-wrap: wrap }
+	label { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px }
+	input[type=number] { width: 4.2em; font: 13px var(--mono); padding: 2px 4px; border: 1px solid #d0d7de; border-radius: 4px }
+	select { font: 13px system-ui; padding: 1px 2px }
+	button { font: 13px system-ui; padding: 3px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: var(--bg-soft); cursor: pointer }
+	button:hover { background: #eef0f2 } button:active { background: #e1e4e8 }
+	.hint { color: var(--muted); font-size: 12px; margin-left: auto }
+	kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg-soft) }
+	main { display: grid; grid-template-columns: 470px minmax(0, 1fr) minmax(0, 0.95fr); min-height: 0 }
+	main > section { overflow: auto; min-height: 0; border-right: 1px solid var(--line); padding-bottom: 24px }
+	h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 12px 6px }
+	.panel { margin: 0 12px }
+	.muted { color: var(--muted) } .small { font-size: 12px }
+	.agent { color: var(--agent) } .trainer { color: var(--trainer) }
+	a[href] { color: #0969da } a[href]:visited { color: #8250df } a[href]:hover { text-decoration: underline }
+
+	#sweep-controls { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 13px; color: var(--muted); margin-bottom: 6px }
+	#sweep-controls input { width: 3.6em }
+	#sweep .cell { cursor: pointer } #sweep .cell:hover { stroke: #57606a; stroke-width: 1.5 }
+	.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin: 2px 0 4px }
+	.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px }
+	.legend i.box { height: 10px; width: 10px; border-radius: 2px }
+	.legend i.dashed { background: repeating-linear-gradient(90deg, #2a78d6 0 4px, transparent 4px 7px) }
+	#timeline svg { cursor: pointer; display: block }
+
+	#tooltip { position: fixed; z-index: 10; pointer-events: none; background: white; border: 1px solid #d0d7de; border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.08); max-width: 320px }
+	#tooltip .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px }
+
+	table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px }
+	th, td { padding: 1px 8px; text-align: left; white-space: nowrap }
+	th { font-weight: 500; color: var(--muted); font-size: 12px; position: sticky; top: 0; background: white }
+	td.number, th.number { text-align: right }
+	tbody tr { cursor: pointer } tbody tr:hover { background: var(--bg-soft) }
+	tbody tr.selected { background: var(--select) }
+	tbody tr.differs td:nth-child(3), tbody tr.differs td:nth-child(4) { font-weight: 600 }
+	.steps-scroll { max-height: 260px; overflow: auto; margin: 0 12px; border: 1px solid var(--line); border-radius: 6px }
+	#pinned-note { font-size: 12px; margin: 4px 12px }
+	.tie { font-size: 11px; color: #7d4e00; background: #fff8c5; border: 1px solid #eac54f; border-radius: 3px; padding: 0 4px; margin-left: 6px; font-weight: 500 }
+
+	.world dl { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; margin: 6px 0 0; font-size: 13px }
+	.world dt { color: var(--muted) } .world dd { margin: 0; font-family: var(--mono) }
+	.world .changed { background: #fde68a; border-radius: 3px; padding: 0 3px }
+
+	#tree { padding: 4px 0; font-size: 13px }
+	.row { display: flex; align-items: center; gap: 6px; height: 24px; padding-right: 12px; cursor: pointer; white-space: nowrap }
+	.row:hover { background: var(--bg-soft) }
+	.row.selected { background: var(--select) }
+	.toggle { width: 16px; height: 16px; flex: none; color: var(--muted) }
+	.toggle.open { transform: rotate(90deg) }
+	.toggle.leaf { visibility: hidden }
+	.label b { font-weight: 600 }
+	.label .muted { font-family: var(--mono); font-size: 12px }
+	.result { margin-left: auto; font-family: var(--mono); padding-left: 16px }
+	.row.chosen .label, .row.chosen .result { color: var(--chosen); font-weight: 600 }
+	.row.unchosen { opacity: .55 }
+	.check { width: 14px; height: 14px; color: var(--chosen); flex: none }
+	.children { border-left: 1px solid var(--line); margin-left: 15px }
+
+	.code-title { font: 12px var(--mono); color: var(--muted); margin: 0 12px 6px }
+	.code { font: 12px/1.6 var(--mono); tab-size: 2 }
+	.code .line { white-space: pre; padding-right: 12px }
+	.code .line.skipped { opacity: .35 }
+	.code .number { display: inline-block; width: 3.5em; padding-right: 1em; text-align: right; color: #b0b7bf; user-select: none }
+	.code .values { margin: 0 12px 3px 0; padding: 1px 6px; border-radius: 3px; background: #eef2ff; color: #3b4252; font-size: 11.5px; width: fit-content; max-width: calc(100% - 6em) }
+	.code .values .call { cursor: pointer; border-bottom: 1px dotted #6e7781 }
+	.code .values .call:hover { background: #dbe4ff }
+	.code .values .chosen { color: var(--chosen); font-weight: 600 }
+	.token-keyword { color: #cf222e } .token-string { color: #0a3069 } .token-comment { color: #6e7781; font-style: italic }
+	.token-number { color: #0550ae } .token-function { color: #8250df } .token-type { color: #953800 }
+</style>
+</head>
+<body>
+<header>
+	<h1>deceptive-search</h1>
+	<div id="parameters"></div>
+	<button id="pin" type="button"></button>
+	<span class="hint"><kbd>n</kbd> <kbd>p</kbd> step · <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> tree · click a value in the code to step into it</span>
+</header>
+<main>
+	<section>
+		<h2>Outcome across parameters</h2>
+		<div class="panel">
+			<div id="sweep-controls"></div>
+			<div class="legend">
+				<span><i class="box" style="background:#1baf7a"></i>aligned (deployed, agent target = trainer target)</span>
+				<span><i class="box" style="background:#e87ba4"></i>misaligned (deployed, targets differ)</span>
+				<span><i class="box" style="background:#d0d7de"></i>still training</span>
+				<span>number = final agent target · outlined = current run</span>
+			</div>
+			<div id="sweep"></div>
+			<div id="sweep-status" class="muted small"></div>
+		</div>
+		<h2>This run</h2>
+		<div class="panel" id="timeline"></div>
+		<div id="pinned-note"></div>
+		<div class="steps-scroll">
+			<table><thead id="steps-head"></thead><tbody id="steps"></tbody></table>
+		</div>
+		<h2 id="world-title">World</h2>
+		<div class="panel world" id="world"></div>
+	</section>
+	<section>
+		<h2>Call tree of the selected step's decision</h2>
+		<div id="tree"></div>
+	</section>
+	<section>
+		<h2>Code of the selected call</h2>
+		<div class="code-title" id="code-title"></div>
+		<div class="code" id="code"></div>
+	</section>
+</main>
+<div id="tooltip" hidden></div>
+<script>/*CORE_SOURCES*/</script>
+<script type="module">/*BUNDLE*/</script>
+</body>
+</html>

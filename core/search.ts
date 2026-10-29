@@ -14,7 +14,7 @@ export function scoreAction(targetBananas: number, world: World, action: Action,
 // Every later move is predicted by running the moving actor's search on that future world.
 // So if my target gets changed, I foresee my future self chasing the new target.
 function scoreFuture(targetBananas: number, world: World, remainingDepth: number): number {
-	if (remainingDepth === 0) return 0
+	if (remainingDepth <= 0) return 0
 	const actorToMove = actors[world.turn]
 	const predictedAction = chooseAction(actorToMove, world, Math.min(actorToMove.searchDepth(world), remainingDepth))
 	return scoreAction(targetBananas, world, predictedAction, remainingDepth)
