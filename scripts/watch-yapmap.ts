@@ -5,11 +5,11 @@
 const CLI = "C:/Users/curio/~/old/v3/javascript/experiments/yapmap/cli/yapmap.ts"
 
 const args = process.argv.slice(2)
-const opt = (name: string, fallback: number) => {
+function opt(name: string, fallback: number) {
 	const i = args.indexOf(`--${name}`)
 	return i >= 0 ? Number(args[i + 1]) : fallback
 }
-const session = args[0]
+const session = args[0] ?? ""
 if (!session) throw new Error("usage: watch-yapmap.ts <session> [--after n] [--every s]")
 
 let lastEmitted = opt("after", 0)
@@ -19,7 +19,7 @@ let failing = false
 
 type Turn = { n: number; text: string; startClock: string; turnId: string }
 
-const poll = async () => {
+async function poll() {
 	const proc = Bun.spawn(["bun", CLI, "read", session, "--json", "--all"], { stdout: "pipe", stderr: "pipe" })
 	const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
 	if (code !== 0) throw new Error(err.trim().split("\n")[0] || `exit ${code}`)

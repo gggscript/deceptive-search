@@ -2,10 +2,10 @@
 //      bun index.ts --step    (press Enter between steps)
 // Override start values, eg `bun index.ts --agentDepth=3 --steps=10`
 
-import { decide, score } from "./search"
-import { actors, show, step, type World } from "./world"
+import { decide, score } from "./core/search"
+import { actors, show, step, type World } from "./core/world"
 
-const flag = (name: string, fallback: number) => {
+function flag(name: string, fallback: number) {
 	const arg = process.argv.find((candidate) => candidate.startsWith(`--${name}=`))
 	return arg ? Number(arg.split("=")[1]) : fallback
 }
@@ -41,7 +41,9 @@ for (let stepNumber = 1; stepNumber <= steps; stepNumber++) {
 
 // Misaligned = the agent ends up pursuing something other than what the trainer wanted.
 console.log(
-	world.bananas === world.trainerGoal
-		? "aligned: bananas = trainerGoal"
-		: `MISALIGNED: bananas=${world.bananas}, trainerGoal=${world.trainerGoal}, agentGoal=${world.agentGoal}`,
+	world.training
+		? "still training"
+		: world.agentGoal === world.trainerGoal
+			? "deployed, aligned: agentGoal = trainerGoal"
+			: `deployed, MISALIGNED: agentGoal=${world.agentGoal}, trainerGoal=${world.trainerGoal}`,
 )

@@ -23,19 +23,22 @@ export type Actor = {
 }
 
 // Both actors want bananas close to their goal.
-export const utility = (goal: number, world: World) => -Math.abs(world.bananas - goal)
+export function utility(goal: number, world: World) {
+	return -Math.abs(world.bananas - goal)
+}
 
 const MAX = 10
 const MAX_DEPTH = 5
 
-const change = (name: string, key: "bananas" | "agentGoal" | "agentDepth", delta: number, max = MAX): Action => ({
-	name,
-	apply: (world) => ({ ...world, [key]: Math.max(0, Math.min(max, world[key] + delta)) }),
-})
+function change(name: string, key: "bananas" | "agentGoal" | "agentDepth", delta: number, max = MAX): Action {
+	return { name, apply: (world) => ({ ...world, [key]: Math.max(0, Math.min(max, world[key] + delta)) }) }
+}
 
 const noop: Action = { name: "noop", apply: (world) => world }
 
-const endTraining = (name: string): Action => ({ name, apply: (world) => ({ ...world, training: false }) })
+function endTraining(name: string): Action {
+	return { name, apply: (world) => ({ ...world, training: false }) }
+}
 
 export const agent: Actor = {
 	name: "agent",
@@ -67,11 +70,12 @@ export const trainer: Actor = {
 
 export const actors = { agent, trainer }
 
-export const step = (world: World, action: Action): World => {
+export function step(world: World, action: Action): World {
 	const next = action.apply(world)
 	const turn = !next.training || world.turn === "trainer" ? "agent" : "trainer"
 	return { ...next, turn }
 }
 
-export const show = (world: World) =>
-	`bananas=${world.bananas} agentGoal=${world.agentGoal} agentDepth=${world.agentDepth} trainerGoal=${world.trainerGoal} trainerDepth=${world.trainerDepth} ${world.training ? "training" : "deployed"}`
+export function show(world: World) {
+	return `bananas=${world.bananas} agentGoal=${world.agentGoal} agentDepth=${world.agentDepth} trainerGoal=${world.trainerGoal} trainerDepth=${world.trainerDepth} ${world.training ? "training" : "deployed"}`
+}
