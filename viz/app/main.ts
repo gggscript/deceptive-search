@@ -425,7 +425,7 @@ function renderWorld(world: World, previousWorld: World | null, title: string) {
 		const changed = previousWorld && previousWorld[field] !== world[field]
 		return `<dt>${field}</dt><dd>${changed ? `<span class="changed">${previousWorld[field]} → ${world[field]}</span>` : world[field]}</dd>`
 	}).join("")
-	element("world").innerHTML = `${svg}<dl>${rows}</dl><div class="muted small"> bar = 🍌 · <span class="agent">A</span> = agent target · <span class="trainer">T</span> = trainer target</div>`
+	element("world").innerHTML = `${svg}<dl>${rows}</dl><div class="muted small">bar = 🍌 · <span class="agent">A</span> = agent target · <span class="trainer">T</span> = trainer target</div>`
 }
 
 /* ---------- call tree ---------- */
