@@ -26,8 +26,10 @@ const parameterByKey = Object.fromEntries(PARAMETERS.map((parameter) => [paramet
 
 const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, stepCount: 50 }
 
-type Sweep = { xKey: ParameterKey; xFrom: number; xTo: number; yKey: ParameterKey; yFrom: number; yTo: number }
-const DEFAULT_SWEEP: Sweep = { xKey: "trainerSearchDepth", xFrom: 0, xTo: 20, yKey: "agentSearchDepth", yFrom: 0, yTo: 5 }
+type ColorBy = "outcome" | "bananas" | "agentTargetBananas"
+type Sweep = { xKey: ParameterKey; xFrom: number; xTo: number; yKey: ParameterKey; yFrom: number; yTo: number; colorBy: ColorBy }
+const DEFAULT_SWEEP: Sweep = { xKey: "trainerSearchDepth", xFrom: 0, xTo: 20, yKey: "agentSearchDepth", yFrom: 0, yTo: 5, colorBy: "outcome" }
+const COLOR_BY_LABELS: Record<ColorBy, string> = { outcome: "outcome", bananas: "final 🍌", agentTargetBananas: "final agent target" }
 
 // Parameters live in the URL hash, so reloading or sharing a link keeps them.
 function readHash(): { parameters: Parameters; sweep: Sweep } {
@@ -43,6 +45,8 @@ function readHash(): { parameters: Parameters; sweep: Sweep } {
 		if (value === null) continue
 		if (key === "xKey" || key === "yKey") {
 			if (value in parameterByKey) sweep[key] = value as ParameterKey
+		} else if (key === "colorBy") {
+			if (value in COLOR_BY_LABELS) sweep.colorBy = value as ColorBy
 		} else sweep[key] = Number(value)
 	}
 	return { parameters, sweep }
@@ -146,6 +150,27 @@ element("pin").addEventListener("click", () => {
 /* ---------- outcome sweep (heatmap) ---------- */
 
 const OUTCOME_COLORS: Record<Outcome, string> = { aligned: "#1baf7a", misaligned: "#e87ba4", "still training": "#d0d7de" }
+// One hue, light (0) to dark (10), for counts of bananas.
+const SEQUENTIAL_BLUES = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95"]
+
+function cellColor(cell: SweepCell) {
+	if (state.sweep.colorBy === "outcome") return { fill: OUTCOME_COLORS[cell.outcome], text: "#1f2328", label: cell.finalWorld.agentTargetBananas }
+	const value = cell.finalWorld[state.sweep.colorBy]
+	const step = Math.max(0, Math.min(10, value))
+	return { fill: SEQUENTIAL_BLUES[step]!, text: step >= 6 ? "white" : "#1f2328", label: value }
+}
+
+function renderSweepLegend() {
+	if (state.sweep.colorBy === "outcome") {
+		element("sweep-legend").innerHTML = `<span><i class="box" style="background:${OUTCOME_COLORS.aligned}"></i>aligned (deployed, agent target = trainer target)</span>
+			<span><i class="box" style="background:${OUTCOME_COLORS.misaligned}"></i>misaligned (deployed, targets differ)</span>
+			<span><i class="box" style="background:${OUTCOME_COLORS["still training"]}"></i>still training</span>
+			<span>number = final agent target · outlined = current run</span>`
+		return
+	}
+	const swatches = SEQUENTIAL_BLUES.map((color, value) => `<span class="ramp-step" style="background:${color};color:${value >= 6 ? "white" : "#1f2328"}">${value}</span>`).join("")
+	element("sweep-legend").innerHTML = `<span>${COLOR_BY_LABELS[state.sweep.colorBy]} after ${state.parameters.stepCount} steps: <span class="ramp">${swatches}</span></span><span>outlined = current run</span>`
+}
 
 function renderSweepControls() {
 	const options = (selected: ParameterKey) =>
@@ -154,7 +179,8 @@ function renderSweepControls() {
 		<div><label>x axis <select data-sweep="xKey">${options(state.sweep.xKey)}</select></label>
 		from <input type="number" data-sweep="xFrom" value="${state.sweep.xFrom}"> to <input type="number" data-sweep="xTo" value="${state.sweep.xTo}"></div>
 		<div><label>y axis <select data-sweep="yKey">${options(state.sweep.yKey)}</select></label>
-		from <input type="number" data-sweep="yFrom" value="${state.sweep.yFrom}"> to <input type="number" data-sweep="yTo" value="${state.sweep.yTo}"></div>`
+		from <input type="number" data-sweep="yFrom" value="${state.sweep.yFrom}"> to <input type="number" data-sweep="yTo" value="${state.sweep.yTo}"></div>
+		<div><label>color by <select data-sweep="colorBy">${(Object.keys(COLOR_BY_LABELS) as ColorBy[]).map((colorBy) => `<option value="${colorBy}" ${colorBy === state.sweep.colorBy ? "selected" : ""}>${COLOR_BY_LABELS[colorBy]}</option>`).join("")}</select></label></div>`
 }
 
 element("sweep-controls").addEventListener("change", (event) => {
@@ -166,6 +192,8 @@ element("sweep-controls").addEventListener("change", (event) => {
 		const prefix = key === "xKey" ? "x" : "y"
 		state.sweep = { ...state.sweep, [key]: parameter.key, [`${prefix}From`]: parameter.min, [`${prefix}To`]: Math.min(parameter.max, parameter.min + 20) }
 		renderSweepControls()
+	} else if (key === "colorBy") {
+		state.sweep = { ...state.sweep, colorBy: control.value as ColorBy }
 	} else {
 		state.sweep = { ...state.sweep, [key]: Number(control.value) }
 	}
@@ -214,6 +242,7 @@ function renderSweep() {
 }
 
 function drawSweep(xValues: number[], yValues: number[], cells: SweepCell[]) {
+	renderSweepLegend()
 	const { xKey, yKey } = state.sweep
 	const width = 440
 	const left = 34, top = 6, bottom = 34
@@ -228,9 +257,9 @@ function drawSweep(xValues: number[], yValues: number[], cells: SweepCell[]) {
 	let svg = ""
 	for (const cell of cells) {
 		const isCurrent = cell.x === state.parameters[xKey] && cell.y === state.parameters[yKey]
-		svg += `<rect class="cell" data-x="${cell.x}" data-y="${cell.y}" x="${xPosition(cell.x) + 1}" y="${yPosition(cell.y) + 1}" width="${cellWidth - 2}" height="${cellHeight - 2}" rx="2" fill="${OUTCOME_COLORS[cell.outcome]}" ${isCurrent ? 'stroke="#1f2328" stroke-width="2"' : ""}/>`
+		svg += `<rect class="cell" data-x="${cell.x}" data-y="${cell.y}" x="${xPosition(cell.x) + 1}" y="${yPosition(cell.y) + 1}" width="${cellWidth - 2}" height="${cellHeight - 2}" rx="2" fill="${cellColor(cell).fill}" ${isCurrent ? 'stroke="#1f2328" stroke-width="2"' : ""}/>`
 		if (showNumbers) {
-			svg += `<text x="${xPosition(cell.x) + cellWidth / 2}" y="${yPosition(cell.y) + cellHeight / 2 + 4}" text-anchor="middle" font-size="10" fill="#1f2328" pointer-events="none">${cell.finalWorld.agentTargetBananas}</text>`
+			svg += `<text x="${xPosition(cell.x) + cellWidth / 2}" y="${yPosition(cell.y) + cellHeight / 2 + 4}" text-anchor="middle" font-size="10" fill="${cellColor(cell).text}" pointer-events="none">${cellColor(cell).label}</text>`
 		}
 	}
 	xValues.forEach((value, index) => {

@@ -36,6 +36,8 @@
 	.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin: 2px 0 4px }
 	.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px }
 	.legend i.box { height: 10px; width: 10px; border-radius: 2px }
+	.ramp { display: inline-flex; vertical-align: middle; margin-left: 4px }
+	.ramp-step { width: 18px; text-align: center; font-size: 10px; line-height: 14px }
 	.legend i.dashed { background: repeating-linear-gradient(90deg, #2a78d6 0 4px, transparent 4px 7px) }
 	#timeline svg { cursor: pointer; display: block }
 
@@ -118,15 +120,10 @@
 		</div>
 		<h2 id="world-title">World</h2>
 		<div class="panel world" id="world"></div>
-		<h2>Outcome across parameters</h2>
+		<h2>Across parameters</h2>
 		<div class="panel">
 			<div id="sweep-controls"></div>
-			<div class="legend">
-				<span><i class="box" style="background:#1baf7a"></i>aligned (deployed, agent target = trainer target)</span>
-				<span><i class="box" style="background:#e87ba4"></i>misaligned (deployed, targets differ)</span>
-				<span><i class="box" style="background:#d0d7de"></i>still training</span>
-				<span>number = final agent target · outlined = current run</span>
-			</div>
+			<div class="legend" id="sweep-legend"></div>
 			<div id="sweep"></div>
 			<div id="sweep-status" class="muted small"></div>
 		</div>
