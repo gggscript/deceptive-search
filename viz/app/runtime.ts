@@ -59,10 +59,18 @@ function callCached(functionName: string, untraced: AnyFunction, argumentValues:
 	// With foreseen forced actions, a result depends only on the forced steps within the search's horizon,
 	// relative to the world's step. Keying by those (not by the absolute step) lets distant steps share entries.
 	if (foreseenKey) level = descend(level, forcedInView(argumentValues))
+	// A search of depth d can't see a deployment more than d steps away, so any countdown above d gives the same
+	// result: capping it lets steps that don't see the deployment coming share entries.
+	const depth = argumentValues.findLast((value) => typeof value === "number") as number | undefined
 	for (const value of argumentValues) {
 		// Plain objects (worlds) contribute each field; everything else (numbers, actors, actions) is a key itself.
 		if (value !== null && typeof value === "object" && !("name" in value)) {
-			for (const field in value) if (field !== "__step") level = descend(level, (value as Record<string, unknown>)[field])
+			for (const field in value) {
+				if (field === "__step") continue
+				let fieldValue = (value as Record<string, unknown>)[field]
+				if (field === "stepsUntilDeployment" && typeof fieldValue === "number" && depth !== undefined) fieldValue = Math.min(fieldValue, depth + 1)
+				level = descend(level, fieldValue)
+			}
 		} else level = descend(level, value)
 	}
 	if (level.has(RESULT)) return level.get(RESULT)
