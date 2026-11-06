@@ -479,8 +479,8 @@ function renderRun() {
 	element("pinned-note").innerHTML = (state.isRunComplete ? "" : `<div class="too-slow">Stopped after ${state.steps.length} of ${state.parameters.stepCount} steps: the search took over ${runTimeLimitMs / 1000}s. Lower a depth or raise the limit to see more.</div>`)
 		+ (state.forced.size ? `<div>${state.forced.size} forced ${state.forced.size === 1 ? "action" : "actions"}: ${[...state.forced].sort(([a], [b]) => a - b).map(([index, name]) => `<a href="#" data-step="${index}">step ${index + 1}</a> ${escapeHtml(name)}`).join(", ")} <button type="button" id="clear-forced">clear</button> <label title="when on, every actor's search predicts these forced actions; when off, they surprise everyone"><input type="checkbox" id="foresee-forced" ${state.foreseeForced ? "checked" : ""}> actors foresee them</label></div>` : "")
 		+ (state.pinned ? pinnedNote() : "")
+	renderedTableSteps = null // drawTimeline re-renders the table (pinned markers may have changed)
 	drawTimeline()
-	renderStepsTable()
 	selectStep(state.selectedStepIndex)
 }
 
@@ -536,9 +536,14 @@ function runsToShow() {
 	return runs
 }
 
-function drawTimeline() {
+// The run the graph and the table show: the hovered one in the run switch, else the selected one.
+function shownRun() {
 	const runs = runsToShow()
-	const shown = runs.find((run) => run.key === (state.previewRun ?? state.shownRun)) ?? runs[0]!
+	return { runs, shown: runs.find((run) => run.key === (state.previewRun ?? state.shownRun)) ?? runs[0]! }
+}
+
+function drawTimeline() {
+	const { runs, shown } = shownRun()
 	const steps = shown.steps
 	const width = 528, height = 204
 	const left = 26, right = 8, top = 22, bottom = 22
@@ -675,6 +680,7 @@ function drawTimeline() {
 		hideTooltip()
 		openStepMenu(stepIndex, event.clientX, event.clientY)
 	}
+	if (renderedTableSteps !== steps) renderStepsTable()
 	const switchElement = container.querySelector("#run-switch") as HTMLElement | null
 	if (switchElement) {
 		const runOf = (event: Event) => ((event.target as Element).closest("button[data-run]") as HTMLElement | null)?.dataset["run"] as ShownRun | undefined
@@ -733,13 +739,19 @@ function roundsOf(steps: Step[]) {
 	return rounds
 }
 
+let renderedTableSteps: Step[] | null = null // which run the table shows, to re-render only when it changes
+
 function renderStepsTable() {
-	const pinnedSteps = state.pinned?.steps
-	element("steps-head").innerHTML = `<tr><th class="number" title="step of the agent's move; the trainer's reply is the next step">step</th><th class="agent">agent</th><th class="trainer">trainer</th><th class="number" title="bananas after the round">🍌</th><th class="number">agent target</th></tr>`
+	const { shown } = shownRun()
+	const steps = shown.steps
+	renderedTableSteps = steps
+	const pinnedSteps = shown.key === "pinned" ? undefined : state.pinned?.steps
+	const showing = shown.key === "current" ? "" : `<tr><th colspan="5" class="showing">showing: ${shown.label}</th></tr>`
+	element("steps-head").innerHTML = `${showing}<tr><th class="number" title="step of the agent's move; the trainer's reply is the next step">step</th><th class="agent">agent</th><th class="trainer">trainer</th><th class="number" title="bananas after the round">🍌</th><th class="number">agent target</th></tr>`
 	const previousActionByActor: Record<string, string | undefined> = {}
 	function actionCell(index: number | null) {
 		if (index === null) return "<td></td>"
-		const step = state.steps[index]!
+		const step = steps[index]!
 		const changed = previousActionByActor[step.actorName] !== undefined && previousActionByActor[step.actorName] !== step.chosenActionName
 		previousActionByActor[step.actorName] = step.chosenActionName
 		const pinnedAction = pinnedSteps?.[index]?.chosenActionName
@@ -749,11 +761,12 @@ function renderStepsTable() {
 		const forcedBadge = step.isForced ? `<span class="forced" title="set by hand, not chosen by the ${step.actorName}'s search">forced</span>` : ""
 		return `<td class="${classes}" data-index="${index}" title="step ${index + 1}"><span class="step-number">${index + 1}</span>${escapeHtml(step.chosenActionName)}${forcedBadge}${step.isForced ? "" : tieBadge(recordDecision(step, 2))}${pinnedNote}</td>`
 	}
-	element("steps").innerHTML = roundsOf(state.steps).map((round) => {
-		const lastStep = state.steps[round.trainerStepIndex ?? round.agentStepIndex]!
+	element("steps").innerHTML = roundsOf(steps).map((round) => {
+		const lastStep = steps[round.trainerStepIndex ?? round.agentStepIndex]!
 		return `<tr><td class="number">${round.agentStepIndex + 1}</td>${actionCell(round.agentStepIndex)}${actionCell(round.trainerStepIndex)}
 			<td class="number">${lastStep.worldAfter.bananas}</td><td class="number">${lastStep.worldAfter.agentTargetBananas}</td></tr>`
 	}).join("")
+	for (const cell of element("steps").querySelectorAll("td[data-index]")) cell.classList.toggle("selected", Number((cell as HTMLElement).dataset["index"]) === state.selectedStepIndex)
 }
 
 // Right-click an action in the table: the same menu as in the graph.
