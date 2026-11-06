@@ -8,6 +8,8 @@ import { actors, availableActions, takeStep, type Action, type Actor, type World
 import { createDockview, themeGithubDark, themeGithubLight, type AddPanelOptions, type DockviewApi } from "dockview"
 
 declare const coreSources: Record<string, string>
+declare const buildCommit: string // the commit this page was built from (viz/build.ts)
+declare const buildIsDirty: boolean // built with uncommitted changes
 
 /* ---------- parameters ---------- */
 
@@ -1404,6 +1406,24 @@ element("dock").addEventListener("auxclick", (event) => {
 	const tab = tabAt(event)
 	if (event.button !== 1 || !tab) return
 	dock.panels.find((panel) => tab.contains(panel.view.tab.element))?.api.close()
+})
+
+// A permalink names the commit, so it keeps showing this code after later deploys.
+const SITE_URL = "https://deceptive-search.gustaf.website"
+const permalinkButton = element<HTMLButtonElement>("copy-permalink")
+permalinkButton.textContent = "copy permalink"
+permalinkButton.title = buildIsDirty
+	? `built from ${buildCommit} plus uncommitted changes: the link shows ${buildCommit} without them`
+	: `link to this exact state, built from commit ${buildCommit}`
+permalinkButton.addEventListener("click", async () => {
+	const url = `${SITE_URL}/visualization/${buildCommit}/${location.hash}`
+	try {
+		await navigator.clipboard.writeText(url)
+		permalinkButton.textContent = "copied"
+	} catch {
+		prompt("copy this link", url)
+	}
+	setTimeout(() => (permalinkButton.textContent = "copy permalink"), 1500)
 })
 
 element("reset-layout").addEventListener("click", () => {

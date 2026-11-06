@@ -44,6 +44,8 @@
 	select { font: 13px system-ui; padding: 1px 2px; background: var(--input-bg); color: var(--text); border: 1px solid var(--input-border); border-radius: 4px }
 	body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none }
 	button { font: 13px system-ui; padding: 3px 10px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--bg-soft); color: var(--text); cursor: pointer }
+	#copy-permalink { min-width: 9.5em } /* the same width for "copy permalink" and "copied" */
+	#github-link { font-size: 13px }
 	#theme { display: inline-flex; align-items: center; padding: 3px 6px }
 	#theme svg { width: 16px; height: 16px }
 	button:hover { background: var(--hover) } button:active { background: var(--active) }
@@ -171,6 +173,8 @@
 	<div id="parameters"></div>
 	<div id="panel-toggles" role="group" aria-label="panels"></div>
 	<button id="reset-layout" type="button" title="restore the default panel layout">reset layout</button>
+	<button id="copy-permalink" type="button"></button>
+	<a href="https://github.com/gggscript/deceptive-search" id="github-link" title="source code on GitHub">GitHub</a>
 	<button id="pin" type="button"></button>
 	<button id="theme" type="button" title="switch light/dark"></button>
 	<span class="hint"><kbd>n</kbd> <kbd>p</kbd> step, <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> tree, middle-drag a number to change it, click a value in the code to step into it, <kbd>Ctrl</kbd> <kbd>Z</kbd> undo</span>

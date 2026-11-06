@@ -19,11 +19,16 @@ if (!build.success) {
 }
 const bundle = await build.outputs[0]!.text()
 
+// The commit this page is built from, for permalinks. "Dirty": built with uncommitted changes.
+const git = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: projectDirectory }).stdout.toString().trim()
+const buildCommit = git("rev-parse", "--short=10", "HEAD")
+const buildIsDirty = git("status", "--porcelain") !== ""
+
 const coreSources = Object.fromEntries(["core/search.ts", "core/world.ts"].map((file) => [file, readFileSync(join(projectDirectory, file), "utf8")]))
 const dockviewCss = readFileSync(join(projectDirectory, "node_modules", "dockview", "dist", "styles", "dockview.css"), "utf8")
 const page = readFileSync(join(vizDirectory, "app", "index.html"), "utf8")
 	.replace("/*DOCKVIEW_CSS*/", () => dockviewCss.replaceAll("</", "<\/"))
-	.replace("/*CORE_SOURCES*/", () => `const coreSources = ${JSON.stringify(coreSources).replaceAll("</", "<\\/")}`)
+	.replace("/*CORE_SOURCES*/", () => `const coreSources = ${JSON.stringify(coreSources).replaceAll("</", "<\\/")}; const buildCommit = ${JSON.stringify(buildCommit)}; const buildIsDirty = ${buildIsDirty}`)
 	.replace("/*BUNDLE*/", () => bundle.replaceAll("</script", "<\\/script"))
 
 mkdirSync(join(vizDirectory, "out"), { recursive: true })
