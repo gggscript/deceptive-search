@@ -18,6 +18,7 @@ let world: World = {
 	trainerSearchDepth: numberFlag("trainerSearchDepth", 3),
 	turn: "agent",
 	isDeployed: false,
+	stepsUntilDeployment: numberFlag("deployAfterStep", 0) > 0 ? numberFlag("deployAfterStep", 0) : null,
 }
 const stepCount = numberFlag("stepCount", 16)
 const pauseBetweenSteps = process.argv.includes("--step")

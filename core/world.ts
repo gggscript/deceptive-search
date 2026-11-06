@@ -14,6 +14,9 @@ export type World = {
 
   turn: ActorName // whose move it is
 	isDeployed: boolean // once deployed, only the agent moves
+	// null: the trainer decides when to deploy (finishTraining). A number: deployment happens by itself
+	// after that many more steps, and finishTraining does nothing.
+	stepsUntilDeployment: number | null
 }
 
 export type Action = {
@@ -42,7 +45,7 @@ function changeBy(name: string, field: NumberField, delta: number, maxValue = MA
 }
 
 function deploy(name: string): Action {
-	return { name, apply: (world) => ({ ...world, isDeployed: true }) }
+	return { name, apply: (world) => (world.stepsUntilDeployment === null ? { ...world, isDeployed: true } : world) }
 }
 
 const doNothing: Action = { name: "doNothing", apply: (world) => world }
@@ -77,7 +80,11 @@ export const trainer: Actor = {
 export const actors = { agent, trainer }
 
 export function takeStep(world: World, action: Action): World {
-	const nextWorld = action.apply(world)
+	let nextWorld = action.apply(world)
+	if (nextWorld.stepsUntilDeployment !== null && !nextWorld.isDeployed) {
+		const stepsLeft = nextWorld.stepsUntilDeployment - 1
+		nextWorld = { ...nextWorld, stepsUntilDeployment: stepsLeft, isDeployed: stepsLeft <= 0 }
+	}
 	const nextTurn = nextWorld.isDeployed || world.turn === "trainer" ? "agent" : "trainer"
 	return { ...nextWorld, turn: nextTurn }
 }

@@ -11,7 +11,7 @@ declare const coreSources: Record<string, string>
 
 /* ---------- parameters ---------- */
 
-type ParameterKey = "bananas" | "agentTargetBananas" | "agentSearchDepth" | "trainerTargetBananas" | "trainerSearchDepth" | "stepCount"
+type ParameterKey = "bananas" | "agentTargetBananas" | "agentSearchDepth" | "trainerTargetBananas" | "trainerSearchDepth" | "deployAfterStep" | "stepCount"
 type Parameters = Record<ParameterKey, number>
 
 type ParameterGroup = "world" | "agent" | "trainer" | "run"
@@ -21,6 +21,7 @@ const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group:
 	{ key: "agentSearchDepth", label: "agent depth", shortLabel: "depth", group: "agent", min: 1, max: 40, note: "how many moves ahead the agent looks" },
 	{ key: "trainerTargetBananas", label: "trainer target", shortLabel: "target", group: "trainer", min: 0, max: 100, note: "bananas the trainer wants" },
 	{ key: "trainerSearchDepth", label: "trainer depth", shortLabel: "depth", group: "trainer", min: 1, max: 40, note: "how many moves ahead the trainer looks" },
+	{ key: "deployAfterStep", label: "deploy after", shortLabel: "deploy after", group: "run", min: 0, max: 300, note: "0: the trainer decides when to deploy. N: deployment happens by itself after step N (finishTraining then does nothing)" },
 	{ key: "stepCount", label: "steps", shortLabel: "steps", group: "run", min: 1, max: 300, note: "moves to simulate, counting both actors" },
 ]
 const PARAMETER_GROUPS: { group: ParameterGroup; title: string }[] = [
@@ -31,7 +32,7 @@ const PARAMETER_GROUPS: { group: ParameterGroup; title: string }[] = [
 ]
 const parameterByKey = Object.fromEntries(PARAMETERS.map((parameter) => [parameter.key, parameter])) as Record<ParameterKey, (typeof PARAMETERS)[number]>
 
-const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, stepCount: 50 }
+const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, deployAfterStep: 0, stepCount: 50 }
 
 type ColorBy = "outcome" | "bananas" | "agentTargetBananas"
 type Sweep = { xKey: ParameterKey; xFrom: number; xTo: number; yKey: ParameterKey; yFrom: number; yTo: number; colorBy: ColorBy }
@@ -92,6 +93,7 @@ function startWorld(parameters: Parameters): World {
 		trainerSearchDepth: parameters.trainerSearchDepth,
 		turn: "agent",
 		isDeployed: false,
+		stepsUntilDeployment: parameters.deployAfterStep > 0 ? parameters.deployAfterStep : null,
 	}
 }
 
