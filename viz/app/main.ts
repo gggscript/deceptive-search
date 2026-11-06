@@ -747,7 +747,7 @@ function renderStepsTable() {
 		const classes = ["action", changed ? "changed" : "", differsFromPinned ? "differs" : ""].join(" ")
 		const pinnedNote = differsFromPinned ? `<span class="pinned-action" title="pinned run">${escapeHtml(pinnedAction ?? "–")}</span>` : ""
 		const forcedBadge = step.isForced ? `<span class="forced" title="set by hand, not chosen by the ${step.actorName}'s search">forced</span>` : ""
-		return `<td class="${classes}" data-index="${index}" title="step ${index + 1}">${escapeHtml(step.chosenActionName)}${forcedBadge}${step.isForced ? "" : tieBadge(recordDecision(step, 2))}${pinnedNote}</td>`
+		return `<td class="${classes}" data-index="${index}" title="step ${index + 1}"><span class="step-number">${index + 1}</span>${escapeHtml(step.chosenActionName)}${forcedBadge}${step.isForced ? "" : tieBadge(recordDecision(step, 2))}${pinnedNote}</td>`
 	}
 	element("steps").innerHTML = roundsOf(state.steps).map((round) => {
 		const lastStep = state.steps[round.trainerStepIndex ?? round.agentStepIndex]!
