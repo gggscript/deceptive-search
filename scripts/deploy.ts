@@ -37,14 +37,15 @@ ${domain} {
 `
 
 if (process.argv.includes("--setup")) {
+	// Safe to run again: adds the site only if missing, and always validates and reloads.
+	// validate needs the Cloudflare token the other sites' configs use (the service gets it from this file).
 	const script = `set -e
-if grep -q '^${domain} {' /etc/caddy/Caddyfile; then echo "already set up"; exit 0; fi
-cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak-$(date +%F)
-cat >> /etc/caddy/Caddyfile
+if grep -q '^${domain} {' /etc/caddy/Caddyfile; then echo "site already in the Caddyfile"; cat > /dev/null
+else cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak-$(date +%F); cat >> /etc/caddy/Caddyfile; echo "added the site"; fi
 mkdir -p ${serverDirectory}/visualization
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+(set -a; [ -f /etc/caddy/cloudflare.env ] && . /etc/caddy/cloudflare.env; set +a; caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null 2>&1) || { echo "caddy validate failed"; exit 1; }
 systemctl reload caddy
-echo "set up ${domain}"`
+echo "reloaded Caddy: https://${domain}/"`
 	console.log(run(["ssh", host, script], { input: CADDY_SITE }))
 	process.exit(0)
 }
