@@ -59,10 +59,13 @@ const packedChooseCache = new Map<number, Map<number, unknown>>()
 function packedKeys(actor: { name: string }, world: PackedWorld, depth: number): [number, number] | null {
 	const { bananas, agentTargetBananas, trainerTargetBananas, agentSearchDepth, trainerSearchDepth } = world
 	if (!Number.isInteger(bananas + agentTargetBananas + trainerTargetBananas + agentSearchDepth + trainerSearchDepth + depth)) return null
-	if (bananas > 127 || agentTargetBananas > 127 || trainerTargetBananas > 127 || agentSearchDepth > 1023 || trainerSearchDepth > 1023 || depth > 1023) return null
+	// Values can be negative: each of bananas and the targets is stored as value + 128, so −128 … 127 fit.
+	if (Math.min(agentSearchDepth, trainerSearchDepth, depth) < 0) return null
+	if (Math.max(Math.abs(bananas + 0.5), Math.abs(agentTargetBananas + 0.5), Math.abs(trainerTargetBananas + 0.5)) > 128) return null
+	if ( agentSearchDepth > 1023 || trainerSearchDepth > 1023 || depth > 1023) return null
 	const countdown = world.stepsUntilDeployment == null ? 0 : Math.min(world.stepsUntilDeployment, depth + 1) + 1 // 0 = trainer decides
 	if (!(countdown <= 1023)) return null // also catches NaN
-	const first = bananas + 128 * (agentTargetBananas + 128 * (trainerTargetBananas + 128 * ((world.turn === "agent" ? 0 : 1) + 2 * ((world.isDeployed ? 1 : 0) + 2 * ((actor.name === "agent" ? 0 : 1) + 2 * (world.agentCanChangeOwnTarget === false ? 1 : 0))))))
+	const first = bananas + 128 + 256 * (agentTargetBananas + 128 + 256 * (trainerTargetBananas + 128 + 256 * ((world.turn === "agent" ? 0 : 1) + 2 * ((world.isDeployed ? 1 : 0) + 2 * ((actor.name === "agent" ? 0 : 1) + 2 * (world.agentCanChangeOwnTarget === false ? 1 : 0))))))
 	const second = agentSearchDepth + 1024 * (trainerSearchDepth + 1024 * (depth + 1024 * countdown))
 	return [first, second]
 }

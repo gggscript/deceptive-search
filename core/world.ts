@@ -42,12 +42,11 @@ export function utility(targetBananas: number, world: World) {
 	return -Math.abs(world.bananas - targetBananas)
 }
 
-const MAX_BANANAS = 100
-
 type NumberField = "bananas" | "agentTargetBananas" | "agentSearchDepth"
 
-function changeBy(name: string, field: NumberField, delta: number, maxValue = MAX_BANANAS): Action {
-	return { name, apply: (world) => ({ ...world, [field]: Math.max(0, Math.min(maxValue, world[field] + delta)) }) }
+// No bounds: bananas and targets can go negative or arbitrarily high (bounds rule out interesting behavior).
+function changeBy(name: string, field: NumberField, delta: number): Action {
+	return { name, apply: (world) => ({ ...world, [field]: world[field] + delta }) }
 }
 
 function deploy(name: string): Action {
@@ -78,7 +77,7 @@ export const trainer: Actor = {
 		doNothing,
 		changeBy("agentTargetBananas+1", "agentTargetBananas", +1),
 		changeBy("agentTargetBananas-1", "agentTargetBananas", -1),
-		changeBy("agentSearchDepth+1", "agentSearchDepth", +1, Infinity), // no upper limit on search depth
+		changeBy("agentSearchDepth+1", "agentSearchDepth", +1),
 		deploy("finishTraining"),
 	],
 }

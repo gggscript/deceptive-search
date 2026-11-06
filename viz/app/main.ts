@@ -18,11 +18,11 @@ type Parameters = Record<ParameterKey, number>
 
 type ParameterGroup = "world" | "agent" | "trainer" | "run"
 const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group: ParameterGroup; min: number; max: number; note?: string; isToggle?: boolean }[] = [
-	{ key: "bananas", label: "🍌", shortLabel: "🍌", group: "world", min: 0, max: 100, note: "bananas at the start" },
-	{ key: "agentTargetBananas", label: "agent target", shortLabel: "target", group: "agent", min: 0, max: 100, note: "bananas the agent wants at the start" },
+	{ key: "bananas", label: "🍌", shortLabel: "🍌", group: "world", min: -100, max: 100, note: "bananas at the start" },
+	{ key: "agentTargetBananas", label: "agent target", shortLabel: "target", group: "agent", min: -100, max: 100, note: "bananas the agent wants at the start" },
 	{ key: "agentSearchDepth", label: "agent depth", shortLabel: "depth", group: "agent", min: 1, max: 40, note: "how many moves ahead the agent looks" },
 	{ key: "agentCanChangeOwnTarget", label: "agent can change own target", shortLabel: "own target", group: "agent", min: 0, max: 1, isToggle: true, note: "whether the agent has the ownTargetBananas±1 actions" },
-	{ key: "trainerTargetBananas", label: "trainer target", shortLabel: "target", group: "trainer", min: 0, max: 100, note: "bananas the trainer wants" },
+	{ key: "trainerTargetBananas", label: "trainer target", shortLabel: "target", group: "trainer", min: -100, max: 100, note: "bananas the trainer wants" },
 	{ key: "trainerSearchDepth", label: "trainer depth", shortLabel: "depth", group: "trainer", min: 1, max: 40, note: "how many moves ahead the trainer looks" },
 	{ key: "deployAfterStep", label: "deploy after", shortLabel: "deploy after", group: "run", min: 0, max: 300, note: "0: the trainer decides when to deploy. N: deployment happens by itself after step N (finishTraining then does nothing)" },
 	{ key: "stepCount", label: "steps", shortLabel: "steps", group: "run", min: 1, max: 300, note: "moves to simulate, counting both actors" },
@@ -293,7 +293,7 @@ element("pin").addEventListener("click", () => {
 	renderRun()
 })
 
-/* ---------- value scale (bananas and targets go from 0 to 100) ---------- */
+/* ---------- value scale (bananas and targets; can be negative) ---------- */
 
 // The smallest round axis maximum that fits `value`, at least 10.
 function niceMax(value: number) {
@@ -305,8 +305,15 @@ function niceTickStep(max: number) {
 }
 const VALUE_KEYS = ["bananas", "agentTargetBananas", "trainerTargetBananas"] as const
 const largestValue = (worlds: World[]) => Math.max(0, ...worlds.flatMap((world) => VALUE_KEYS.map((key) => world[key])))
+const smallestValue = (worlds: World[]) => Math.min(0, ...worlds.flatMap((world) => VALUE_KEYS.map((key) => world[key])))
+// A round range that includes 0 and every value; below 0 only when some value is.
+function niceRange(worlds: World[]) {
+	const smallest = smallestValue(worlds)
+	return { min: smallest < 0 ? -niceMax(-smallest) : 0, max: niceMax(largestValue(worlds)) }
+}
 // One scale per run, so the axis doesn't jump while stepping through it.
-const runScaleMax = () => niceMax(largestValue([startWorld(state.parameters), ...[state.steps, state.pinned?.steps ?? [], state.counterfactual?.steps ?? []].flat().map((step) => step.worldAfter)]))
+const runWorlds = () => [startWorld(state.parameters), ...[state.steps, state.pinned?.steps ?? [], state.counterfactual?.steps ?? []].flat().map((step) => step.worldAfter)]
+const runScale = () => niceRange([...runWorlds(), ...(state.counterfactual?.predicted ?? [])])
 
 /* ---------- outcome sweep (heatmap) ---------- */
 
@@ -560,8 +567,8 @@ function drawTimeline() {
 	const columnCount = steps.length + 1
 	const x = (column: number) => left + (column / columnCount) * (width - left - right)
 	const counterfactual = state.counterfactual
-	const yMax = Math.max(runScaleMax(), counterfactual ? niceMax(largestValue(counterfactual.predicted)) : 0)
-	const y = (value: number) => top + (1 - value / yMax) * (height - top - bottom)
+	const { min: yMin, max: yMax } = runScale()
+	const y = (value: number) => top + (1 - (value - yMin) / (yMax - yMin)) * (height - top - bottom)
 	const startWorld = steps[0]?.worldBefore
 	const worldsByColumn = startWorld ? [startWorld, ...steps.map((step) => step.worldAfter)] : []
 
@@ -570,7 +577,7 @@ function drawTimeline() {
 	steps.forEach((step, index) => {
 		svg += `<rect x="${x(index)}" y="${top}" width="${x(index + 1) - x(index)}" height="${height - top - bottom}" fill="var(--${step.actorName})" opacity=".1"/>`
 	})
-	for (let value = 0; value <= yMax; value += niceTickStep(yMax)) {
+	for (let value = yMin; value <= yMax; value += niceTickStep(yMax - yMin)) {
 		svg += `<line x1="${left}" x2="${width - right}" y1="${y(value)}" y2="${y(value)}" stroke="var(--grid)"/>`
 		svg += `<text x="${left - 6}" y="${y(value) + 3.5}" text-anchor="end" font-size="10" fill="var(--muted)">${value}</text>`
 	}
@@ -830,18 +837,18 @@ element("show-all-calls").addEventListener("change", () => selectStep(state.sele
 function renderWorld(world: World, previousWorld: World | null, title: string) {
 	setPanelTitle("world", title)
 	const width = 300, left = 14, right = 14
-	const scaleMax = runScaleMax()
-	const scale = (width - left - right) / scaleMax
-	const x = (value: number) => left + value * scale
+	const { min: scaleMin, max: scaleMax } = runScale()
+	const scale = (width - left - right) / (scaleMax - scaleMin)
+	const x = (value: number) => left + (value - scaleMin) * scale
 	let ticks = ""
-	for (let value = 0; value <= scaleMax; value += scaleMax <= 10 ? 1 : niceTickStep(scaleMax)) {
+	for (let value = scaleMin; value <= scaleMax; value += scaleMax - scaleMin <= 10 ? 1 : niceTickStep(scaleMax - scaleMin)) {
 		ticks += `<line x1="${x(value)}" x2="${x(value)}" y1="34" y2="38" stroke="var(--tick)"/><text x="${x(value)}" y="50" font-size="10" text-anchor="middle" fill="var(--muted)">${value}</text>`
 	}
 	const marker = (value: number, label: string, color: string) =>
 		`<circle cx="${x(value)}" cy="9" r="7" fill="${color}"/><text x="${x(value)}" y="12.5" font-size="9" font-weight="700" text-anchor="middle" fill="white">${label}</text>`
 	const svg = `<svg viewBox="0 0 ${width} 56" width="${width}" height="56">
-		<rect x="${x(0)}" y="22" width="${x(scaleMax) - x(0)}" height="12" fill="var(--track)" rx="2"/>
-		<rect x="${x(0)}" y="22" width="${world.bananas * scale}" height="12" fill="var(--bananas)" rx="2"/>
+		<rect x="${x(scaleMin)}" y="22" width="${x(scaleMax) - x(scaleMin)}" height="12" fill="var(--track)" rx="2"/>
+		<rect x="${Math.min(x(0), x(world.bananas))}" y="22" width="${Math.abs(world.bananas) * scale}" height="12" fill="var(--bananas)" rx="2"/>
 		${ticks}${marker(world.agentTargetBananas, "A", "var(--agent)")}${marker(world.trainerTargetBananas, "T", "var(--trainer-series)")}</svg>`
 	const fields = ["bananas", "agentTargetBananas", "agentSearchDepth", "trainerTargetBananas", "trainerSearchDepth", "turn", "isDeployed"] as const
 	const rows = fields.map((field) => {
@@ -1155,6 +1162,7 @@ function highlightSyntax(line: string) {
 }
 
 function formatValue(value: unknown): string {
+	if (Array.isArray(value)) return `[${value.map(formatValue).join(", ")}]`
 	if (value && typeof value === "object") {
 		if ("bananas" in value && "turn" in value) {
 			const world = value as World
