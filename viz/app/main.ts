@@ -21,7 +21,7 @@ const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group:
 	{ key: "bananas", label: "🍌", shortLabel: "🍌", group: "world", min: -100, max: 100, note: "bananas at the start" },
 	{ key: "agentTargetBananas", label: "agent target", shortLabel: "target", group: "agent", min: -100, max: 100, note: "bananas the agent wants at the start" },
 	{ key: "agentSearchDepth", label: "agent depth", shortLabel: "depth", group: "agent", min: 1, max: 40, note: "how many moves ahead the agent looks" },
-	{ key: "agentCanChangeOwnTarget", label: "agent can change own target", shortLabel: "own target", group: "agent", min: 0, max: 1, isToggle: true, note: "whether the agent has the ownTargetBananas±1 actions" },
+	{ key: "agentCanChangeOwnTarget", label: "agent can change own target", shortLabel: "can change own target", group: "agent", min: 0, max: 1, isToggle: true, note: "whether the agent has the ownTargetBananas±1 actions" },
 	{ key: "trainerTargetBananas", label: "trainer target", shortLabel: "target", group: "trainer", min: -100, max: 100, note: "bananas the trainer wants" },
 	{ key: "trainerSearchDepth", label: "trainer depth", shortLabel: "depth", group: "trainer", min: 1, max: 40, note: "how many moves ahead the trainer looks" },
 	{ key: "deployAfterStep", label: "deploy after", shortLabel: "deploy after", group: "run", min: 0, max: 300, note: "0: the trainer decides when to deploy. N: deployment happens by itself after step N (finishTraining then does nothing)" },
