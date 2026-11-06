@@ -44,7 +44,8 @@
 	select { font: 13px system-ui; padding: 1px 2px; background: var(--input-bg); color: var(--text); border: 1px solid var(--input-border); border-radius: 4px }
 	body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none }
 	button { font: 13px system-ui; padding: 3px 10px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--bg-soft); color: var(--text); cursor: pointer }
-	#copy-permalink { min-width: 9.5em } /* the same width for "copy permalink" and "copied" */
+	#copy-permalink { display: inline-flex; align-items: center; padding: 3px 6px }
+	#copy-permalink svg { width: 16px; height: 16px }
 	#github-link { font-size: 13px }
 	#theme { display: inline-flex; align-items: center; padding: 3px 6px }
 	#theme svg { width: 16px; height: 16px }

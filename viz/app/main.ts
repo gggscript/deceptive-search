@@ -1410,20 +1410,22 @@ element("dock").addEventListener("auxclick", (event) => {
 
 // A permalink names the commit, so it keeps showing this code after later deploys.
 const SITE_URL = "https://deceptive-search.gustaf.website"
+const COPY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`
+const CHECK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
 const permalinkButton = element<HTMLButtonElement>("copy-permalink")
-permalinkButton.textContent = "copy permalink"
+permalinkButton.innerHTML = COPY_ICON
 permalinkButton.title = buildIsDirty
-	? `built from ${buildCommit} plus uncommitted changes: the link shows ${buildCommit} without them`
-	: `link to this exact state, built from commit ${buildCommit}`
+	? `copy permalink (commit ${buildCommit}; this build also has uncommitted changes, which the link won't show)`
+	: `copy permalink (commit ${buildCommit})`
 permalinkButton.addEventListener("click", async () => {
 	const url = `${SITE_URL}/visualization/${buildCommit}/${location.hash}`
 	try {
 		await navigator.clipboard.writeText(url)
-		permalinkButton.textContent = "copied"
+		permalinkButton.innerHTML = CHECK_ICON
 	} catch {
 		prompt("copy this link", url)
 	}
-	setTimeout(() => (permalinkButton.textContent = "copy permalink"), 1500)
+	setTimeout(() => (permalinkButton.innerHTML = COPY_ICON), 1500)
 })
 
 element("reset-layout").addEventListener("click", () => {
