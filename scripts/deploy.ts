@@ -1,0 +1,65 @@
+// `bun run deploy`: publish the visualizer at https://deceptive-search.gustaf.website/visualization/<commit>/
+// and point /visualization/latest/ at it. Old commits stay online, so links that name a commit keep working.
+//
+//   bun run deploy           build the last commit and upload it
+//   bun run deploy --setup   once: add the site to Caddy on the server (backs up the Caddyfile first)
+//
+// The server is the yapmap VPS (`ssh horst`, see experiments/yapmap/deploy/README.md). Caddy serves
+// /srv/deceptive-search as static files; DNS for deceptive-search.gustaf.website already points there.
+
+import { join } from "node:path"
+
+const root = join(import.meta.dir, "..")
+const host = process.env["DECEPTIVE_SEARCH_DEPLOY_SSH"] ?? "horst"
+const serverDirectory = "/srv/deceptive-search"
+const domain = "deceptive-search.gustaf.website"
+
+function run(command: string[], options: { input?: string } = {}) {
+	const result = Bun.spawnSync(command, { cwd: root, stdin: options.input === undefined ? "inherit" : new TextEncoder().encode(options.input), stdout: "pipe", stderr: "pipe" })
+	const output = result.stdout.toString() + result.stderr.toString()
+	if (result.exitCode !== 0) {
+		console.error(`failed: ${command.join(" ")}\n${output}`)
+		process.exit(1)
+	}
+	return output.trim()
+}
+
+const CADDY_SITE = `
+# deceptive-search visualizer (repo experiments/deceptive-search, \`bun run deploy\`).
+# Static files: one folder per commit under /visualization/<commit>/, "latest" links to the newest.
+${domain} {
+	encode zstd gzip
+	root * ${serverDirectory}
+	redir / /visualization/latest/ 302
+	file_server
+	header Strict-Transport-Security "max-age=31536000"
+}
+`
+
+if (process.argv.includes("--setup")) {
+	const script = `set -e
+if grep -q '^${domain} {' /etc/caddy/Caddyfile; then echo "already set up"; exit 0; fi
+cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak-$(date +%F)
+cat >> /etc/caddy/Caddyfile
+mkdir -p ${serverDirectory}/visualization
+caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+systemctl reload caddy
+echo "set up ${domain}"`
+	console.log(run(["ssh", host, script], { input: CADDY_SITE }))
+	process.exit(0)
+}
+
+// What ships is the last commit: refuse uncommitted changes, so a link's commit really is the code.
+const changes = run(["git", "status", "--porcelain"])
+if (changes) {
+	console.error(`commit first; uncommitted changes:\n${changes}`)
+	process.exit(1)
+}
+const commit = run(["git", "rev-parse", "--short=10", "HEAD"])
+console.log(run(["bun", "viz/build.ts"]))
+
+const target = `${serverDirectory}/visualization/${commit}`
+run(["ssh", host, `mkdir -p ${target}`])
+run(["scp", "-q", join(root, "viz", "out", "index.html"), `${host}:${target}/index.html`])
+run(["ssh", host, `ln -sfn ${commit} ${serverDirectory}/visualization/latest`])
+console.log(`https://${domain}/visualization/${commit}/\nhttps://${domain}/visualization/latest/ now points there`)
