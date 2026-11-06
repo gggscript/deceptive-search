@@ -5,7 +5,8 @@ import { chooseAction } from "../../core/search"
 import { actors, availableActions, takeStep, type World } from "../../core/world"
 
 // isForced: the action was set by hand (a counterfactual), not chosen by the actor's search.
-export type Step = { worldBefore: World; worldAfter: World; actorName: string; chosenActionName: string; isForced?: boolean }
+// tiedWith: other actions that scored as well as the chosen one (filled in by the worker).
+export type Step = { worldBefore: World; worldAfter: World; actorName: string; chosenActionName: string; isForced?: boolean; tiedWith?: string[] }
 
 export type Outcome = "aligned" | "misaligned" | "still training"
 

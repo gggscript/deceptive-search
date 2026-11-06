@@ -55,7 +55,8 @@ function descend(level: CacheLevel, key: unknown) {
 // Fast path for chooseAction(actor, world, searchDepth) without foreseen forced actions: the world packed into
 // two numbers, so a lookup is two Map reads instead of one per world field. Falls back when a value doesn't fit.
 type PackedWorld = { bananas: number; agentTargetBananas: number; trainerTargetBananas: number; agentSearchDepth: number; trainerSearchDepth: number; turn: string; isDeployed: boolean; stepsUntilDeployment: number | null; agentCanChangeOwnTarget?: boolean }
-const packedChooseCache = new Map<number, Map<number, unknown>>()
+// One table per pattern of foreseen forced actions in view ("" when none), each keyed by the packed world.
+const packedChooseCaches = new Map<string, Map<number, Map<number, unknown>>>()
 function packedKeys(actor: { name: string }, world: PackedWorld, depth: number): [number, number] | null {
 	const { bananas, agentTargetBananas, trainerTargetBananas, agentSearchDepth, trainerSearchDepth } = world
 	if (!Number.isInteger(bananas + agentTargetBananas + trainerTargetBananas + agentSearchDepth + trainerSearchDepth + depth)) return null
@@ -72,11 +73,14 @@ function packedKeys(actor: { name: string }, world: PackedWorld, depth: number):
 
 function callCached(functionName: string, untraced: AnyFunction, argumentValues: unknown[]) {
 	checkDeadline()
-	if (functionName === "chooseAction" && !foreseenKey) {
+	if (functionName === "chooseAction") {
 		const keys = packedKeys(argumentValues[0] as { name: string }, argumentValues[1] as PackedWorld, argumentValues[2] as number)
 		if (keys) {
-			let inner = packedChooseCache.get(keys[0])
-			if (!inner) packedChooseCache.set(keys[0], (inner = new Map()))
+			const view = foreseenKey ? forcedInView(argumentValues) : ""
+			let table = packedChooseCaches.get(view)
+			if (!table) packedChooseCaches.set(view, (table = new Map()))
+			let inner = table.get(keys[0])
+			if (!inner) table.set(keys[0], (inner = new Map()))
 			if (inner.has(keys[1])) return inner.get(keys[1])
 			const result = untraced(...argumentValues)
 			inner.set(keys[1], result)

@@ -2,7 +2,9 @@
 // The browser UI. It runs the real core (see simulate.ts) whenever a parameter changes.
 
 import { recordCalls, withForesight, type CallNode } from "./runtime"
-import { outcomeOf, simulateWithin, type Outcome, type Step } from "./simulate"
+import { outcomeOf, type Outcome, type Step } from "./simulate"
+import { TimeLimitReached, withTimeLimit } from "./runtime"
+import type { RunRequest, SweepJob, SweepCellResult, WorkerResponse } from "./worker"
 import { chooseAction } from "../../core/search"
 import { actors, availableActions, takeStep, type Action, type Actor, type World } from "../../core/world"
 import { createDockview, themeGithubDark, themeGithubLight, type AddPanelOptions, type DockviewApi } from "dockview"
@@ -10,6 +12,37 @@ import { createDockview, themeGithubDark, themeGithubLight, type AddPanelOptions
 declare const coreSources: Record<string, string>
 declare const buildCommit: string // the commit this page was built from (viz/build.ts)
 declare const buildIsDirty: boolean // built with uncommitted changes
+declare const workerSource: string // viz/app/worker.ts, bundled (viz/build.ts)
+
+/* ---------- the worker: searches run there, so the page never freezes ---------- */
+
+const worker = new Worker(URL.createObjectURL(new Blob([workerSource], { type: "text/javascript" })))
+let nextRequestId = 0
+const handlers = new Map<string, { id: number; onResponse: (response: WorkerResponse) => void }>()
+// A new request on a channel replaces the old one; the worker cancels the old one at its next step.
+function requestFromWorker(request: Omit<RunRequest, "id"> | { type: "sweep"; channel: string; jobs: SweepJob[]; cellLimitMs: number }, onResponse: (response: WorkerResponse) => void) {
+	const id = ++nextRequestId
+	handlers.set(request.channel, { id, onResponse })
+	worker.postMessage({ ...request, id })
+}
+function cancelWorkerChannel(channel: string) {
+	handlers.delete(channel)
+}
+worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+	const handler = handlers.get(event.data.channel)
+	if (handler && handler.id === event.data.id) handler.onResponse(event.data)
+}
+
+// Several streamed updates per frame are drawn once.
+let isRedrawScheduled = false
+function scheduleRedraw(redraw: () => void) {
+	if (isRedrawScheduled) return
+	isRedrawScheduled = true
+	requestAnimationFrame(() => {
+		isRedrawScheduled = false
+		redraw()
+	})
+}
 
 /* ---------- parameters ---------- */
 
@@ -18,14 +51,14 @@ type Parameters = Record<ParameterKey, number>
 
 type ParameterGroup = "world" | "agent" | "trainer" | "run"
 const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group: ParameterGroup; min: number; max: number; note?: string; isToggle?: boolean }[] = [
-	{ key: "bananas", label: "🍌", shortLabel: "🍌", group: "world", min: -100, max: 100, note: "bananas at the start" },
-	{ key: "agentTargetBananas", label: "agent target", shortLabel: "target", group: "agent", min: -100, max: 100, note: "bananas the agent wants at the start" },
-	{ key: "agentSearchDepth", label: "agent depth", shortLabel: "depth", group: "agent", min: 1, max: 40, note: "how many moves ahead the agent looks" },
+	{ key: "bananas", label: "🍌", shortLabel: "🍌", group: "world", min: -1000, max: 1000, note: "bananas at the start" },
+	{ key: "agentTargetBananas", label: "agent target", shortLabel: "target", group: "agent", min: -1000, max: 1000, note: "bananas the agent wants at the start" },
+	{ key: "agentSearchDepth", label: "agent depth", shortLabel: "depth", group: "agent", min: 1, max: 1000, note: "how many moves ahead the agent looks" },
 	{ key: "agentCanChangeOwnTarget", label: "agent can change own target", shortLabel: "can change own target", group: "agent", min: 0, max: 1, isToggle: true, note: "whether the agent has the ownTargetBananas±1 actions" },
-	{ key: "trainerTargetBananas", label: "trainer target", shortLabel: "target", group: "trainer", min: -100, max: 100, note: "bananas the trainer wants" },
-	{ key: "trainerSearchDepth", label: "trainer depth", shortLabel: "depth", group: "trainer", min: 1, max: 40, note: "how many moves ahead the trainer looks" },
-	{ key: "deployAfterStep", label: "deploy after", shortLabel: "deploy after", group: "run", min: 0, max: 300, note: "0: the trainer decides when to deploy. N: deployment happens by itself after step N (finishTraining then does nothing)" },
-	{ key: "stepCount", label: "steps", shortLabel: "steps", group: "run", min: 1, max: 300, note: "moves to simulate, counting both actors" },
+	{ key: "trainerTargetBananas", label: "trainer target", shortLabel: "target", group: "trainer", min: -1000, max: 1000, note: "bananas the trainer wants" },
+	{ key: "trainerSearchDepth", label: "trainer depth", shortLabel: "depth", group: "trainer", min: 1, max: 1000, note: "how many moves ahead the trainer looks" },
+	{ key: "deployAfterStep", label: "deploy after", shortLabel: "deploy after", group: "run", min: 0, max: 1000, note: "0: the trainer decides when to deploy. N: deployment happens by itself after step N (finishTraining then does nothing)" },
+	{ key: "stepCount", label: "steps", shortLabel: "steps", group: "run", min: 1, max: 1000, note: "moves to simulate, counting both actors" },
 ]
 const PARAMETER_GROUPS: { group: ParameterGroup; title: string }[] = [
 	{ group: "world", title: "world" },
@@ -112,6 +145,7 @@ const state = {
 	selectedRowPath: [] as number[], // child indexes from the root of the decision tree
 	pinned: null as { parameters: Parameters; steps: Step[] } | null,
 	isRunComplete: true, // false when the run hit the time limit before stepCount steps
+	isRunDone: false, // false while the worker still computes steps
 	// Actions set by hand at some steps (step index → action name); the run is simulated with them.
 	forced: initial.forced,
 	unforcedSteps: [] as Step[], // the same run without forced actions, for comparison
@@ -185,6 +219,7 @@ let runTimeLimitMs = (() => {
 	return seconds > 0 ? Math.min(600, seconds) * 1000 : 1000
 })()
 const SWEEP_CELL_TIME_LIMIT_MS = 150
+const DECISION_TIME_LIMIT_MS = 2000
 
 // Undo/redo over parameters and forced actions. Each setParameters records the state it replaces;
 // changes less than 500ms apart (typing a number) count as one.
@@ -235,14 +270,31 @@ function setParameters(parameters: Parameters, { keepInputs = false, fromHistory
 	const keepStep = state.selectedStepIndex
 	state.parameters = parameters
 	if (!keepInputs) renderParameterInputs()
-	const run = simulateWithin(startWorld(parameters), parameters.stepCount, runTimeLimitMs, state.forced, 0, state.foreseeForced)
-	state.steps = run.steps
-	state.isRunComplete = run.isComplete
-	state.unforcedSteps = state.forced.size ? simulateWithin(startWorld(parameters), parameters.stepCount, runTimeLimitMs).steps : []
-	state.selectedStepIndex = Math.min(keepStep, state.steps.length - 1)
 	currentSnapshot = takeSnapshot()
 	writeHash()
-	renderRun()
+	const runRequest = { type: "run" as const, start: startWorld(parameters), stepCount: parameters.stepCount, limitMs: runTimeLimitMs, firstStepIndex: 0 }
+	let steps: Step[] = []
+	state.isRunDone = false
+	requestFromWorker({ ...runRequest, channel: "run", forced: [...state.forced], foresee: state.foreseeForced }, (response) => {
+		if (response.type !== "run") return
+		steps = [...steps, ...response.steps]
+		state.steps = steps
+		state.isRunComplete = response.isComplete
+		state.isRunDone = response.done
+		state.selectedStepIndex = Math.max(0, Math.min(keepStep, steps.length - 1))
+		// While steps stream in, only the graph and table; the decision tree once the run is done.
+		scheduleRedraw(() => (state.isRunDone ? renderRun() : (renderRunNote(), drawTimeline())))
+	})
+	state.unforcedSteps = []
+	if (state.forced.size) {
+		let unforced: Step[] = []
+		requestFromWorker({ ...runRequest, channel: "unforced", forced: [], foresee: false }, (response) => {
+			if (response.type !== "run") return
+			unforced = [...unforced, ...response.steps]
+			state.unforcedSteps = unforced
+			if (response.done) scheduleRedraw(drawTimeline)
+		})
+	} else cancelWorkerChannel("unforced")
 	renderSweep()
 }
 
@@ -407,28 +459,20 @@ function renderSweep() {
 	const xValues = rangeOf(xKey, state.sweep.xFrom, state.sweep.xTo)
 	const yValues = rangeOf(yKey, state.sweep.yFrom, state.sweep.yTo)
 	const cells: SweepCell[] = []
-	const jobs = yValues.flatMap((y) => xValues.map((x) => ({ x, y })))
-	let jobIndex = 0
-	const startTime = performance.now()
-	function work() {
-		if (generation !== sweepGeneration) return
-		const batchStart = performance.now()
-		while (jobIndex < jobs.length && performance.now() - batchStart < 12) {
-			const { x, y } = jobs[jobIndex++]!
-			const parameters = { ...state.parameters, [xKey]: x, [yKey]: y }
-			const { steps, isComplete } = simulateWithin(startWorld(parameters), parameters.stepCount, SWEEP_CELL_TIME_LIMIT_MS)
-			const finalWorld = steps.at(-1)?.worldAfter ?? startWorld(parameters)
-			const deployedIndex = steps.findIndex((step) => step.worldAfter.isDeployed)
-			cells.push({ x, y, outcome: outcomeOf(finalWorld), finalWorld, deployedAtStep: deployedIndex >= 0 ? deployedIndex + 1 : null, isComplete })
-		}
-		drawSweep(xValues, yValues, cells)
-		const done = jobIndex >= jobs.length
-		element("sweep-status").textContent = done
-			? `${jobs.length} runs of ${state.parameters.stepCount} steps in ${Math.round(performance.now() - startTime)}ms`
-			: `computing ${jobIndex}/${jobs.length}…`
-		if (!done) setTimeout(work, 0)
-	}
-	work()
+	const jobs: SweepJob[] = yValues.flatMap((y) => xValues.map((x) => {
+		const parameters = { ...state.parameters, [xKey]: x, [yKey]: y }
+		return { x, y, start: startWorld(parameters), stepCount: parameters.stepCount }
+	}))
+	drawSweep(xValues, yValues, cells)
+	element("sweep-status").textContent = `computing 0/${jobs.length}…`
+	requestFromWorker({ type: "sweep", channel: "sweep", jobs, cellLimitMs: SWEEP_CELL_TIME_LIMIT_MS }, (response) => {
+		if (response.type !== "sweep" || generation !== sweepGeneration) return
+		cells.push(...response.cells.map((cell: SweepCellResult) => ({ ...cell, outcome: outcomeOf(cell.finalWorld) })))
+		scheduleRedraw(() => drawSweep(xValues, yValues, cells))
+		element("sweep-status").textContent = response.done
+			? `${jobs.length} runs of ${state.parameters.stepCount} steps in ${Math.round(response.milliseconds)}ms`
+			: `computing ${cells.length}/${jobs.length}…`
+	})
 }
 
 function drawSweep(xValues: number[], yValues: number[], cells: SweepCell[]) {
@@ -492,12 +536,16 @@ const SERIES = [
 
 function renderRun() {
 	element("pin").textContent = state.pinned ? "Unpin" : "Pin this run to compare"
-	element("pinned-note").innerHTML = (state.isRunComplete ? "" : `<div class="too-slow">Stopped after ${state.steps.length} of ${state.parameters.stepCount} steps: the search took over ${runTimeLimitMs / 1000}s. Lower a depth or raise the limit to see more.</div>`)
-		+ (state.forced.size ? `<div>${state.forced.size} forced ${state.forced.size === 1 ? "action" : "actions"}: ${[...state.forced].sort(([a], [b]) => a - b).map(([index, name]) => `<a href="#" data-step="${index}">step ${index + 1}</a> ${escapeHtml(name)}`).join(", ")} <button type="button" id="clear-forced">clear</button> <label title="when on, every actor's search predicts these forced actions; when off, they surprise everyone"><input type="checkbox" id="foresee-forced" ${state.foreseeForced ? "checked" : ""}> actors foresee them</label></div>` : "")
-		+ (state.pinned ? pinnedNote() : "")
+	renderRunNote()
 	renderedTableSteps = null // drawTimeline re-renders the table (pinned markers may have changed)
 	drawTimeline()
 	selectStep(state.selectedStepIndex)
+}
+
+function renderRunNote() {
+	element("pinned-note").innerHTML = (!state.isRunDone ? `<div class="muted small">computing… ${state.steps.length} of ${state.parameters.stepCount} steps</div>` : state.isRunComplete ? "" : `<div class="too-slow">Stopped after ${state.steps.length} of ${state.parameters.stepCount} steps: the search took over ${runTimeLimitMs / 1000}s. Lower a depth or raise the limit to see more.</div>`)
+		+ (state.forced.size ? `<div>${state.forced.size} forced ${state.forced.size === 1 ? "action" : "actions"}: ${[...state.forced].sort(([a], [b]) => a - b).map(([index, name]) => `<a href="#" data-step="${index}">step ${index + 1}</a> ${escapeHtml(name)}`).join(", ")} <button type="button" id="clear-forced">clear</button> <label title="when on, every actor's search predicts these forced actions; when off, they surprise everyone"><input type="checkbox" id="foresee-forced" ${state.foreseeForced ? "checked" : ""}> actors foresee them</label></div>` : "")
+		+ (state.pinned ? pinnedNote() : "")
 }
 
 function firstDifference(stepsA: Step[], stepsB: Step[]) {
@@ -731,7 +779,9 @@ function tiedActionNames(chooseCall: CallNode) {
 }
 
 function tieBadge(chooseCall: CallNode) {
-	const tied = tiedActionNames(chooseCall)
+	return tieBadgeOf(tiedActionNames(chooseCall))
+}
+function tieBadgeOf(tied: string[]) {
 	return tied.length ? `<span class="tie" title="tied with ${escapeHtml(tied.join(", "))}; ties go to the earliest action in the list">tie ×${tied.length + 1}</span>` : ""
 }
 
@@ -776,7 +826,7 @@ function renderStepsTable() {
 		const classes = ["action", changed ? "changed" : "", differsFromPinned ? "differs" : ""].join(" ")
 		const pinnedNote = differsFromPinned ? `<span class="pinned-action" title="pinned run">${escapeHtml(pinnedAction ?? "–")}</span>` : ""
 		const forcedBadge = step.isForced ? `<span class="forced" title="set by hand, not chosen by the ${step.actorName}'s search">forced</span>` : ""
-		return `<td class="${classes}" data-index="${index}" title="step ${index + 1}"><span class="step-number">${index + 1}</span>${escapeHtml(step.chosenActionName)}${forcedBadge}${step.isForced ? "" : tieBadge(recordDecision(step, 2))}${pinnedNote}</td>`
+		return `<td class="${classes}" data-index="${index}" title="step ${index + 1}"><span class="step-number">${index + 1}</span>${escapeHtml(step.chosenActionName)}${forcedBadge}${step.isForced ? "" : tieBadgeOf(step.tiedWith ?? [])}${pinnedNote}</td>`
 	}
 	element("steps").innerHTML = roundsOf(steps).map((round) => {
 		const lastStep = steps[round.trainerStepIndex ?? round.agentStepIndex]!
@@ -821,7 +871,16 @@ function selectStep(index: number) {
 	drawTimeline()
 	const step = state.steps[state.selectedStepIndex]!
 	const tree = element("tree")
-	const decision = recordDecision(step, 3)
+	// The tree records one decision on the page itself; a time limit keeps a deep one from freezing the page.
+	let decision: CallNode
+	try {
+		decision = withTimeLimit(DECISION_TIME_LIMIT_MS, () => recordDecision(step, 3))
+	} catch (error) {
+		if (!(error instanceof TimeLimitReached)) throw error
+		tree.innerHTML = `<div class="too-slow" style="margin: 8px 12px">This decision takes over ${DECISION_TIME_LIMIT_MS / 1000}s to show here. Lower a depth to see it.</div>`
+		renderWorld(step.worldAfter, step.worldBefore, `World after step ${state.selectedStepIndex + 1}`)
+		return
+	}
 	tree.replaceChildren(showAllCalls() ? createTreeNode(decision, null) : createDecisionNode(decision, false))
 	selectRow(tree.querySelector(".row") as TreeRow)
 	renderWorld(step.worldAfter, step.worldBefore, `World after step ${state.selectedStepIndex + 1}`)
@@ -991,14 +1050,22 @@ function counterfactualOf(call: CallNode): typeof state.counterfactual {
 	if (call.functionName !== "scoreAction" || !step || argument(call, "world") !== step.worldBefore) return null
 	const action = argument(call, "action") as Action
 	const firstWorld = takeStep(step.worldBefore, action)
-	const rest = simulateWithin(firstWorld, state.steps.length - stepIndex - 1, runTimeLimitMs, state.forced, stepIndex + 1, state.foreseeForced).steps
-	return {
+	const counterfactual = {
 		stepIndex,
 		actionName: action.name,
 		isChosen: action.name === step.chosenActionName,
 		predicted: [childCall(call, "takeStep")!.result as World, ...expectedMoves(call).map((move) => move.worldAfter)],
-		steps: [...state.steps.slice(0, stepIndex), { worldBefore: step.worldBefore, worldAfter: firstWorld, actorName: step.actorName, chosenActionName: action.name }, ...rest],
+		steps: [...state.steps.slice(0, stepIndex), { worldBefore: step.worldBefore, worldAfter: firstWorld, actorName: step.actorName, chosenActionName: action.name }],
 	}
+	// The rest of the run comes from the worker and is appended as it arrives.
+	if (!counterfactual.isChosen) {
+		requestFromWorker({ type: "run", channel: "counterfactual", start: firstWorld, stepCount: state.steps.length - stepIndex - 1, limitMs: runTimeLimitMs, forced: [...state.forced], foresee: state.foreseeForced, firstStepIndex: stepIndex + 1 }, (response) => {
+			if (response.type !== "run" || state.counterfactual !== counterfactual) return
+			counterfactual.steps = [...counterfactual.steps, ...response.steps]
+			scheduleRedraw(drawTimeline)
+		})
+	}
+	return counterfactual
 }
 
 /* ---------- decision view ---------- */
