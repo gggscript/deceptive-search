@@ -52,8 +52,35 @@ function descend(level: CacheLevel, key: unknown) {
 	return next
 }
 
+// Fast path for chooseAction(actor, world, searchDepth) without foreseen forced actions: the world packed into
+// two numbers, so a lookup is two Map reads instead of one per world field. Falls back when a value doesn't fit.
+type PackedWorld = { bananas: number; agentTargetBananas: number; trainerTargetBananas: number; agentSearchDepth: number; trainerSearchDepth: number; turn: string; isDeployed: boolean; stepsUntilDeployment: number | null }
+const packedChooseCache = new Map<number, Map<number, unknown>>()
+function packedKeys(actor: { name: string }, world: PackedWorld, depth: number): [number, number] | null {
+	const { bananas, agentTargetBananas, trainerTargetBananas, agentSearchDepth, trainerSearchDepth } = world
+	if (!Number.isInteger(bananas + agentTargetBananas + trainerTargetBananas + agentSearchDepth + trainerSearchDepth + depth)) return null
+	if (bananas > 127 || agentTargetBananas > 127 || trainerTargetBananas > 127 || agentSearchDepth > 1023 || trainerSearchDepth > 1023 || depth > 1023) return null
+	const countdown = world.stepsUntilDeployment == null ? 0 : Math.min(world.stepsUntilDeployment, depth + 1) + 1 // 0 = trainer decides
+	if (!(countdown <= 1023)) return null // also catches NaN
+	const first = bananas + 128 * (agentTargetBananas + 128 * (trainerTargetBananas + 128 * ((world.turn === "agent" ? 0 : 1) + 2 * ((world.isDeployed ? 1 : 0) + 2 * (actor.name === "agent" ? 0 : 1)))))
+	const second = agentSearchDepth + 1024 * (trainerSearchDepth + 1024 * (depth + 1024 * countdown))
+	return [first, second]
+}
+
 function callCached(functionName: string, untraced: AnyFunction, argumentValues: unknown[]) {
 	checkDeadline()
+	if (functionName === "chooseAction" && !foreseenKey) {
+		const keys = packedKeys(argumentValues[0] as { name: string }, argumentValues[1] as PackedWorld, argumentValues[2] as number)
+		if (keys) {
+			let inner = packedChooseCache.get(keys[0])
+			if (!inner) packedChooseCache.set(keys[0], (inner = new Map()))
+			if (inner.has(keys[1])) return inner.get(keys[1])
+			const result = untraced(...argumentValues)
+			inner.set(keys[1], result)
+			cacheEntryCount++
+			return result
+		}
+	}
 	let level = cacheByFunction.get(functionName)
 	if (!level) cacheByFunction.set(functionName, (level = new Map()))
 	// With foreseen forced actions, a result depends only on the forced steps within the search's horizon,
