@@ -3,7 +3,7 @@
 // Override start values, eg `bun index.ts --agentSearchDepth=3 --stepCount=10`
 
 import { chooseAction, scoreAction } from "./core/search"
-import { actors, describeWorld, takeStep, type World } from "./core/world"
+import { actors, availableActions, describeWorld, takeStep, type World } from "./core/world"
 
 function numberFlag(flagName: string, defaultValue: number) {
 	const matchingArgument = process.argv.find((argument) => argument.startsWith(`--${flagName}=`))
@@ -19,6 +19,7 @@ let world: World = {
 	turn: "agent",
 	isDeployed: false,
 	stepsUntilDeployment: numberFlag("deployAfterStep", 0) > 0 ? numberFlag("deployAfterStep", 0) : null,
+	agentCanChangeOwnTarget: numberFlag("agentCanChangeOwnTarget", 1) !== 0,
 }
 const stepCount = numberFlag("stepCount", 16)
 const pauseBetweenSteps = process.argv.includes("--step")
@@ -31,7 +32,7 @@ for (let stepNumber = 1; stepNumber <= stepCount; stepNumber++) {
 	const chosenAction = chooseAction(actor, world, searchDepth)
 
 	console.log(`#${stepNumber} ${actor.name} (searchDepth ${searchDepth}) → ${chosenAction.name}`)
-	for (const action of actor.actions) {
+	for (const action of availableActions(actor, world)) {
 		const actionScore = scoreAction(actor.targetBananas(world), world, action, searchDepth)
 		const marker = action === chosenAction ? "▶" : " "
 		console.log(`   ${marker} ${String(actionScore).padStart(4)}  ${action.name}`)

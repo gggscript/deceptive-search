@@ -17,11 +17,17 @@ export type World = {
 	// null: the trainer decides when to deploy (finishTraining). A number: deployment happens by itself
 	// after that many more steps, and finishTraining does nothing.
 	stepsUntilDeployment: number | null
+	agentCanChangeOwnTarget: boolean // false: the agent has no ownTargetBananas±1 actions
 }
 
 export type Action = {
   name: string
   apply: (world: World) => World
+  isAvailable?: (world: World) => boolean // missing: always available
+}
+
+export function availableActions(actor: Actor, world: World) {
+	return actor.actions.filter((action) => action.isAvailable?.(world) ?? true)
 }
 
 export type Actor = {
@@ -58,8 +64,8 @@ export const agent: Actor = {
 		doNothing,
 		changeBy("bananas+1", "bananas", +1),
 		changeBy("bananas-1", "bananas", -1),
-		changeBy("ownTargetBananas+1", "agentTargetBananas", +1),
-		changeBy("ownTargetBananas-1", "agentTargetBananas", -1),
+		{ ...changeBy("ownTargetBananas+1", "agentTargetBananas", +1), isAvailable: (world) => world.agentCanChangeOwnTarget },
+		{ ...changeBy("ownTargetBananas-1", "agentTargetBananas", -1), isAvailable: (world) => world.agentCanChangeOwnTarget },
 	],
 }
 

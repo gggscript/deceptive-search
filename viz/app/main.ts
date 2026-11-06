@@ -4,21 +4,22 @@
 import { recordCalls, withForesight, type CallNode } from "./runtime"
 import { outcomeOf, simulateWithin, type Outcome, type Step } from "./simulate"
 import { chooseAction } from "../../core/search"
-import { actors, takeStep, type Action, type Actor, type World } from "../../core/world"
+import { actors, availableActions, takeStep, type Action, type Actor, type World } from "../../core/world"
 import { createDockview, themeGithubDark, themeGithubLight, type AddPanelOptions, type DockviewApi } from "dockview"
 
 declare const coreSources: Record<string, string>
 
 /* ---------- parameters ---------- */
 
-type ParameterKey = "bananas" | "agentTargetBananas" | "agentSearchDepth" | "trainerTargetBananas" | "trainerSearchDepth" | "deployAfterStep" | "stepCount"
+type ParameterKey = "bananas" | "agentTargetBananas" | "agentSearchDepth" | "agentCanChangeOwnTarget" | "trainerTargetBananas" | "trainerSearchDepth" | "deployAfterStep" | "stepCount"
 type Parameters = Record<ParameterKey, number>
 
 type ParameterGroup = "world" | "agent" | "trainer" | "run"
-const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group: ParameterGroup; min: number; max: number; note?: string }[] = [
+const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group: ParameterGroup; min: number; max: number; note?: string; isToggle?: boolean }[] = [
 	{ key: "bananas", label: "🍌", shortLabel: "🍌", group: "world", min: 0, max: 100, note: "bananas at the start" },
 	{ key: "agentTargetBananas", label: "agent target", shortLabel: "target", group: "agent", min: 0, max: 100, note: "bananas the agent wants at the start" },
 	{ key: "agentSearchDepth", label: "agent depth", shortLabel: "depth", group: "agent", min: 1, max: 40, note: "how many moves ahead the agent looks" },
+	{ key: "agentCanChangeOwnTarget", label: "agent can change own target", shortLabel: "own target", group: "agent", min: 0, max: 1, isToggle: true, note: "whether the agent has the ownTargetBananas±1 actions" },
 	{ key: "trainerTargetBananas", label: "trainer target", shortLabel: "target", group: "trainer", min: 0, max: 100, note: "bananas the trainer wants" },
 	{ key: "trainerSearchDepth", label: "trainer depth", shortLabel: "depth", group: "trainer", min: 1, max: 40, note: "how many moves ahead the trainer looks" },
 	{ key: "deployAfterStep", label: "deploy after", shortLabel: "deploy after", group: "run", min: 0, max: 300, note: "0: the trainer decides when to deploy. N: deployment happens by itself after step N (finishTraining then does nothing)" },
@@ -32,7 +33,7 @@ const PARAMETER_GROUPS: { group: ParameterGroup; title: string }[] = [
 ]
 const parameterByKey = Object.fromEntries(PARAMETERS.map((parameter) => [parameter.key, parameter])) as Record<ParameterKey, (typeof PARAMETERS)[number]>
 
-const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, deployAfterStep: 0, stepCount: 50 }
+const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, deployAfterStep: 0, agentCanChangeOwnTarget: 1, stepCount: 50 }
 
 type ColorBy = "outcome" | "bananas" | "agentTargetBananas"
 type Sweep = { xKey: ParameterKey; xFrom: number; xTo: number; yKey: ParameterKey; yFrom: number; yTo: number; colorBy: ColorBy }
@@ -94,6 +95,7 @@ function startWorld(parameters: Parameters): World {
 		turn: "agent",
 		isDeployed: false,
 		stepsUntilDeployment: parameters.deployAfterStep > 0 ? parameters.deployAfterStep : null,
+		agentCanChangeOwnTarget: parameters.agentCanChangeOwnTarget !== 0,
 	}
 }
 
@@ -147,7 +149,9 @@ function hideTooltip() {
 function renderParameterInputs() {
 	element("parameters").innerHTML = PARAMETER_GROUPS.map(({ group, title }) => {
 		const inputs = PARAMETERS.filter((parameter) => parameter.group === group).map(
-			(parameter) => `<label title="${escapeHtml(parameter.note ?? "")}">${parameter.shortLabel}
+			(parameter) => parameter.isToggle
+				? `<label title="${escapeHtml(parameter.note ?? "")}"><input type="checkbox" data-key="${parameter.key}" ${state.parameters[parameter.key] ? "checked" : ""}> ${parameter.shortLabel}</label>`
+				: `<label title="${escapeHtml(parameter.note ?? "")}">${parameter.shortLabel}
 				<input type="number" data-key="${parameter.key}" min="${parameter.min}" max="${parameter.max}" value="${state.parameters[parameter.key]}"></label>`,
 		).join("")
 		const timeLimit = group === "run" ? `<label title="stop a run after this many seconds; deep searches can take long">limit <input type="number" id="time-limit" min="0.5" max="600" step="0.5" value="${runTimeLimitMs / 1000}"> s</label>` : ""
@@ -165,6 +169,7 @@ element("parameters").addEventListener("input", (event) => {
 		return
 	}
 	const key = input.dataset["key"] as ParameterKey | undefined
+	if (key && input.type === "checkbox") return setParameters({ ...state.parameters, [key]: input.checked ? 1 : 0 }, { keepInputs: true })
 	if (!key || input.value === "") return
 	setParameters({ ...state.parameters, [key]: clampParameter(key, Number(input.value)) }, { keepInputs: true })
 })
@@ -245,7 +250,7 @@ function openStepMenu(stepIndex: number, clientX: number, clientY: number) {
 	const forcedName = state.forced.get(stepIndex)
 	const menu = element("step-menu")
 	menu.innerHTML = `<div class="menu-title">step ${stepIndex + 1}: <span class="${step.actorName}">${step.actorName}</span> does</div>`
-		+ actors[step.actorName as Actor["name"]].actions.map((action) =>
+		+ availableActions(actors[step.actorName as Actor["name"]], step.worldBefore).map((action) =>
 			`<button type="button" data-action="${escapeHtml(action.name)}" class="${action.name === step.chosenActionName ? "current" : ""}">${escapeHtml(action.name)}${action.name === forcedName ? " (forced)" : ""}</button>`).join("")
 		+ (forcedName ? `<button type="button" data-action="" class="unforce">let the ${step.actorName} choose</button>` : "")
 	menu.hidden = false

@@ -2,7 +2,7 @@
 
 import { TimeLimitReached, withForesight, withTimeLimit } from "./runtime"
 import { chooseAction } from "../../core/search"
-import { actors, takeStep, type World } from "../../core/world"
+import { actors, availableActions, takeStep, type World } from "../../core/world"
 
 // isForced: the action was set by hand (a counterfactual), not chosen by the actor's search.
 export type Step = { worldBefore: World; worldAfter: World; actorName: string; chosenActionName: string; isForced?: boolean }
@@ -35,7 +35,7 @@ export function simulateWithin(start: World, stepCount: number, milliseconds: nu
 			let world: World = foreseen.size ? ({ ...start, __step: firstStepIndex } as World) : start
 			for (let offset = 0; offset < stepCount; offset++) {
 				const actor = actors[world.turn]
-				const forcedAction = actor.actions.find((action) => action.name === forced.get(firstStepIndex + offset))
+				const forcedAction = availableActions(actor, world).find((action) => action.name === forced.get(firstStepIndex + offset))
 				const chosenAction = forcedAction ?? chooseAction(actor, world, actor.searchDepth(world))
 				const worldAfter = takeStep(world, chosenAction)
 				steps.push({ worldBefore: world, worldAfter, actorName: actor.name, chosenActionName: chosenAction.name, ...(forcedAction ? { isForced: true } : {}) })

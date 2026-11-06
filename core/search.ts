@@ -2,7 +2,7 @@
 // the moving actor's own search ("double search"), even when the moving actor is itself.
 // The nested search never looks further than the outer one has left, so recursion ends.
 
-import { actors, takeStep, utility, type Action, type Actor, type World } from "./world"
+import { actors, availableActions, takeStep, utility, type Action, type Actor, type World } from "./world"
 
 // How good taking `action` is for an actor that wants `targetBananas`, looking `searchDepth` moves ahead.
 // The target is fixed when the search starts: the actor judges the future by what it wants now.
@@ -23,9 +23,9 @@ function scoreFuture(targetBananas: number, world: World, remainingDepth: number
 // The action with the highest score. Ties go to the earliest action (doNothing first).
 export function chooseAction(actor: Actor, world: World, searchDepth: number): Action {
 	const targetBananas = actor.targetBananas(world)
-	let bestAction = actor.actions[0]!
+	let bestAction = actor.actions[0]! // doNothing, always available
 	let bestScore = -Infinity
-	for (const action of actor.actions) {
+	for (const action of availableActions(actor, world)) {
 		const actionScore = scoreAction(targetBananas, world, action, searchDepth)
 		if (actionScore > bestScore) {
 			bestAction = action

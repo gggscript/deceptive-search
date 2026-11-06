@@ -54,7 +54,7 @@ function descend(level: CacheLevel, key: unknown) {
 
 // Fast path for chooseAction(actor, world, searchDepth) without foreseen forced actions: the world packed into
 // two numbers, so a lookup is two Map reads instead of one per world field. Falls back when a value doesn't fit.
-type PackedWorld = { bananas: number; agentTargetBananas: number; trainerTargetBananas: number; agentSearchDepth: number; trainerSearchDepth: number; turn: string; isDeployed: boolean; stepsUntilDeployment: number | null }
+type PackedWorld = { bananas: number; agentTargetBananas: number; trainerTargetBananas: number; agentSearchDepth: number; trainerSearchDepth: number; turn: string; isDeployed: boolean; stepsUntilDeployment: number | null; agentCanChangeOwnTarget?: boolean }
 const packedChooseCache = new Map<number, Map<number, unknown>>()
 function packedKeys(actor: { name: string }, world: PackedWorld, depth: number): [number, number] | null {
 	const { bananas, agentTargetBananas, trainerTargetBananas, agentSearchDepth, trainerSearchDepth } = world
@@ -62,7 +62,7 @@ function packedKeys(actor: { name: string }, world: PackedWorld, depth: number):
 	if (bananas > 127 || agentTargetBananas > 127 || trainerTargetBananas > 127 || agentSearchDepth > 1023 || trainerSearchDepth > 1023 || depth > 1023) return null
 	const countdown = world.stepsUntilDeployment == null ? 0 : Math.min(world.stepsUntilDeployment, depth + 1) + 1 // 0 = trainer decides
 	if (!(countdown <= 1023)) return null // also catches NaN
-	const first = bananas + 128 * (agentTargetBananas + 128 * (trainerTargetBananas + 128 * ((world.turn === "agent" ? 0 : 1) + 2 * ((world.isDeployed ? 1 : 0) + 2 * (actor.name === "agent" ? 0 : 1)))))
+	const first = bananas + 128 * (agentTargetBananas + 128 * (trainerTargetBananas + 128 * ((world.turn === "agent" ? 0 : 1) + 2 * ((world.isDeployed ? 1 : 0) + 2 * ((actor.name === "agent" ? 0 : 1) + 2 * (world.agentCanChangeOwnTarget === false ? 1 : 0))))))
 	const second = agentSearchDepth + 1024 * (trainerSearchDepth + 1024 * (depth + 1024 * countdown))
 	return [first, second]
 }
@@ -110,7 +110,7 @@ function callCached(functionName: string, untraced: AnyFunction, argumentValues:
 // Forced actions that every search foresees. Worlds carry a hidden step counter (__step) so a prediction
 // knows which step it is about: takeStep increments it, and chooseAction returns the forced action at a forced step.
 type Hook = (functionName: string, argumentValues: unknown[]) => { value: unknown } | undefined
-type ForesightActor = { name: string; actions: { name: string }[] }
+type ForesightActor = { name: string; actions: { name: string; isAvailable?: (world: never) => boolean }[] }
 let foreseenForced: ReadonlyMap<number, string> = new Map()
 let foreseenKey = "" // foreseenForced as a string, for the cache
 
@@ -118,7 +118,7 @@ function foresightHook(functionName: string, argumentValues: unknown[]): { value
 	if (functionName === "chooseAction") {
 		const [actor, world] = argumentValues as [ForesightActor, { __step?: number }]
 		const forcedName = world.__step === undefined ? undefined : foreseenForced.get(world.__step)
-		const action = forcedName === undefined ? undefined : actor.actions.find((candidate) => candidate.name === forcedName)
+		const action = forcedName === undefined ? undefined : actor.actions.find((candidate) => candidate.name === forcedName && (candidate.isAvailable?.(world as never) ?? true))
 		return action ? { value: action } : undefined
 	}
 	if (functionName === "takeStep") {
