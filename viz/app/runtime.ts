@@ -54,10 +54,11 @@ function descend(level: CacheLevel, key: unknown) {
 
 // Fast path for chooseAction(actor, world, searchDepth) without foreseen forced actions: the world packed into
 // two numbers, so a lookup is two Map reads instead of one per world field. Falls back when a value doesn't fit.
-type PackedWorld = { bananas: number; agentTargetBananas: number; trainerTargetBananas: number; agentSearchDepth: number; trainerSearchDepth: number; turn: string; isDeployed: boolean; stepsUntilDeployment: number | null; agentCanChangeOwnTarget?: boolean }
+type PackedWorld = { bananas: number; agentTargetBananas: number; trainerTargetBananas: number; agentSearchDepth: number; trainerSearchDepth: number; turn: string; isDeployed: boolean; stepsUntilDeployment: number | null; agentCanChangeOwnTarget?: boolean; fullDepthPredictions?: boolean }
 // One table per pattern of foreseen forced actions in view ("" when none), each keyed by the packed world.
 const packedChooseCaches = new Map<string, Map<number, Map<number, unknown>>>()
-function packedKeys(actor: { name: string }, world: PackedWorld, depth: number): [number, number] | null {
+// `nesting` matters only with fullDepthPredictions, and then only whether it is 0.
+function packedKeys(actor: { name: string }, world: PackedWorld, depth: number, nesting: number): [number, number] | null {
 	const { bananas, agentTargetBananas, trainerTargetBananas, agentSearchDepth, trainerSearchDepth } = world
 	if (!Number.isInteger(bananas + agentTargetBananas + trainerTargetBananas + agentSearchDepth + trainerSearchDepth + depth)) return null
 	// Values can be negative: each of bananas and the targets is stored as value + 128, so −128 … 127 fit.
@@ -66,7 +67,7 @@ function packedKeys(actor: { name: string }, world: PackedWorld, depth: number):
 	if ( agentSearchDepth > 1023 || trainerSearchDepth > 1023 || depth > 1023) return null
 	const countdown = world.stepsUntilDeployment == null ? 0 : Math.min(world.stepsUntilDeployment, depth + 1) + 1 // 0 = trainer decides
 	if (!(countdown <= 1023)) return null // also catches NaN
-	const first = bananas + 128 + 256 * (agentTargetBananas + 128 + 256 * (trainerTargetBananas + 128 + 256 * ((world.turn === "agent" ? 0 : 1) + 2 * ((world.isDeployed ? 1 : 0) + 2 * ((actor.name === "agent" ? 0 : 1) + 2 * (world.agentCanChangeOwnTarget === false ? 1 : 0))))))
+	const first = bananas + 128 + 256 * (agentTargetBananas + 128 + 256 * (trainerTargetBananas + 128 + 256 * ((world.turn === "agent" ? 0 : 1) + 2 * ((world.isDeployed ? 1 : 0) + 2 * ((actor.name === "agent" ? 0 : 1) + 2 * ((world.agentCanChangeOwnTarget === false ? 1 : 0) + 2 * (world.fullDepthPredictions ? (nesting === 0 ? 2 : 1) : 0)))))))
 	const second = agentSearchDepth + 1024 * (trainerSearchDepth + 1024 * (depth + 1024 * countdown))
 	return [first, second]
 }
@@ -74,7 +75,7 @@ function packedKeys(actor: { name: string }, world: PackedWorld, depth: number):
 function callCached(functionName: string, untraced: AnyFunction, argumentValues: unknown[]) {
 	checkDeadline()
 	if (functionName === "chooseAction") {
-		const keys = packedKeys(argumentValues[0] as { name: string }, argumentValues[1] as PackedWorld, argumentValues[2] as number)
+		const keys = packedKeys(argumentValues[0] as { name: string }, argumentValues[1] as PackedWorld, argumentValues[2] as number, (argumentValues[3] as number | undefined) ?? 0)
 		if (keys) {
 			const view = foreseenKey ? forcedInView(argumentValues) : ""
 			let table = packedChooseCaches.get(view)
@@ -95,7 +96,7 @@ function callCached(functionName: string, untraced: AnyFunction, argumentValues:
 	if (foreseenKey) level = descend(level, forcedInView(argumentValues))
 	// A search of depth d can't see a deployment more than d steps away, so any countdown above d gives the same
 	// result: capping it lets steps that don't see the deployment coming share entries.
-	const depth = argumentValues.findLast((value) => typeof value === "number") as number | undefined
+	const depth = typeof argumentValues[2] === "number" ? argumentValues[2] : undefined
 	for (const value of argumentValues) {
 		// Plain objects (worlds) contribute each field; everything else (numbers, actors, actions) is a key itself.
 		if (value !== null && typeof value === "object" && !("name" in value)) {
@@ -169,8 +170,8 @@ export function withForesight<T>(forced: ReadonlyMap<number, string>, takeStep: 
 // The forced steps a call can see: from its world's step up to its search depth (the last number argument) ahead.
 function forcedInView(argumentValues: unknown[]) {
 	const world = argumentValues.find((value) => value !== null && typeof value === "object" && "__step" in value) as { __step: number } | undefined
-	const depth = argumentValues.findLast((value) => typeof value === "number") as number | undefined
-	if (!world || depth === undefined) return foreseenKey
+	const depth = argumentValues[2] as number | undefined
+	if (!world || typeof depth !== "number") return foreseenKey
 	const start = world.__step
 	let key = ""
 	for (const [index, name] of foreseenForced) if (index >= start && index < start + depth) key += `${index - start}:${name},`

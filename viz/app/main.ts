@@ -46,7 +46,7 @@ function scheduleRedraw(redraw: () => void) {
 
 /* ---------- parameters ---------- */
 
-type ParameterKey = "bananas" | "agentTargetBananas" | "agentSearchDepth" | "agentCanChangeOwnTarget" | "trainerTargetBananas" | "trainerSearchDepth" | "deployAfterStep" | "stepCount"
+type ParameterKey = "bananas" | "agentTargetBananas" | "agentSearchDepth" | "agentCanChangeOwnTarget" | "trainerTargetBananas" | "trainerSearchDepth" | "deployAfterStep" | "fullDepthPredictions" | "stepCount"
 type Parameters = Record<ParameterKey, number>
 
 type ParameterGroup = "world" | "agent" | "trainer" | "run"
@@ -58,6 +58,7 @@ const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group:
 	{ key: "trainerTargetBananas", label: "trainer target", shortLabel: "target", group: "trainer", min: -1000, max: 1000, note: "bananas the trainer wants" },
 	{ key: "trainerSearchDepth", label: "trainer depth", shortLabel: "depth", group: "trainer", min: 1, max: 1000, note: "how many moves ahead the trainer looks" },
 	{ key: "deployAfterStep", label: "deploy after", shortLabel: "deploy after", group: "run", min: 0, max: 1000, note: "0: the trainer decides when to deploy. N: deployment happens by itself after step N (finishTraining then does nothing)" },
+	{ key: "fullDepthPredictions", label: "predict others at full depth", shortLabel: "predict others at full depth", group: "run", min: 0, max: 1, isToggle: true, note: "off: a predicted mover searches at most as deep as the prediction has moves left. On: the movers a deciding actor predicts directly search with their own full depth (deeper predictions stay capped)" },
 	{ key: "stepCount", label: "steps", shortLabel: "steps", group: "run", min: 1, max: 1000, note: "moves to simulate, counting both actors" },
 ]
 const PARAMETER_GROUPS: { group: ParameterGroup; title: string }[] = [
@@ -68,7 +69,7 @@ const PARAMETER_GROUPS: { group: ParameterGroup; title: string }[] = [
 ]
 const parameterByKey = Object.fromEntries(PARAMETERS.map((parameter) => [parameter.key, parameter])) as Record<ParameterKey, (typeof PARAMETERS)[number]>
 
-const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, deployAfterStep: 0, agentCanChangeOwnTarget: 1, stepCount: 50 }
+const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, deployAfterStep: 0, agentCanChangeOwnTarget: 1, fullDepthPredictions: 0, stepCount: 50 }
 
 type ColorBy = "outcome" | "bananas" | "agentTargetBananas"
 type Sweep = { xKey: ParameterKey; xFrom: number; xTo: number; yKey: ParameterKey; yFrom: number; yTo: number; colorBy: ColorBy }
@@ -131,6 +132,7 @@ function startWorld(parameters: Parameters): World {
 		isDeployed: false,
 		stepsUntilDeployment: parameters.deployAfterStep > 0 ? parameters.deployAfterStep : null,
 		agentCanChangeOwnTarget: parameters.agentCanChangeOwnTarget !== 0,
+		fullDepthPredictions: parameters.fullDepthPredictions !== 0,
 	}
 }
 

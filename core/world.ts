@@ -18,6 +18,7 @@ export type World = {
 	// after that many more steps, and finishTraining does nothing.
 	stepsUntilDeployment: number | null
 	agentCanChangeOwnTarget: boolean // false: the agent has no ownTargetBananas±1 actions
+	fullDepthPredictions: boolean // see core/search.ts: directly predicted movers search with their full depth
 }
 
 export type Action = {
