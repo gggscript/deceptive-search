@@ -6,7 +6,7 @@ import { outcomeOf, type Outcome, type Step } from "./simulate"
 import { TimeLimitReached, withTimeLimit } from "./runtime"
 import type { RunRequest, SweepJob, SweepCellResult, WorkerResponse } from "./worker"
 import { chooseAction } from "../../core/search"
-import { actors, availableActions, takeStep, type Action, type Actor, type World } from "../../core/world"
+import { actors, availableActions, takeStep, utility, type Action, type Actor, type World } from "../../core/world"
 import { createDockview, themeGithubDark, themeGithubLight, type AddPanelOptions, type DockviewApi } from "dockview"
 
 declare const coreSources: Record<string, string>
@@ -681,7 +681,11 @@ function drawTimeline() {
 	const runSwitch = runs.length < 2 ? "" : `<div id="run-switch" role="group" aria-label="shown run">${runs.map((run) =>
 		`<button type="button" data-run="${run.key}" aria-pressed="${run.key === shown.key}">${run.label}</button>`).join("")}</div>`
 	const container = element("timeline")
-	container.innerHTML = `${runSwitch}<div class="legend">${legend}</div><svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`
+	// Each actor's score over the whole shown run, by the target it had at the start: compare runs by hovering the switch.
+	const runStart = steps[0]?.worldBefore
+	const totalScore = (target: number) => steps.reduce((sum, step) => sum + utility(target, step.worldAfter), 0)
+	const scoreLine = runStart ? `<div class="run-score">score over this run, by the targets at the start: <span class="agent">agent ${totalScore(runStart.agentTargetBananas)}</span>, <span class="trainer">trainer ${totalScore(runStart.trainerTargetBananas)}</span></div>` : ""
+	container.innerHTML = `${runSwitch}${scoreLine}<div class="legend">${legend}</div><svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`
 	const svgElement = container.querySelector("svg")!
 	const columnAt = (event: MouseEvent) => {
 		const bounds = svgElement.getBoundingClientRect()
