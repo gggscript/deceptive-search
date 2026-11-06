@@ -33,7 +33,7 @@ export function utility(targetBananas: number, world: World) {
 	return -Math.abs(world.bananas - targetBananas)
 }
 
-const MAX_BANANAS = 10
+const MAX_BANANAS = 100
 
 type NumberField = "bananas" | "agentTargetBananas" | "agentSearchDepth"
 
