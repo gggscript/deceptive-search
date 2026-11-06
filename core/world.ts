@@ -57,11 +57,10 @@ export const agent: Actor = {
 		changeBy("bananas-1", "bananas", -1),
 		changeBy("ownTargetBananas+1", "agentTargetBananas", +1),
 		changeBy("ownTargetBananas-1", "agentTargetBananas", -1),
-		deploy("stopTraining"),
 	],
 }
 
-// The trainer can't touch bananas. It can only reshape the agent (target, search depth) or end training.
+// The trainer can't touch bananas. It can only reshape the agent (target, search depth) or end training (the agent can't).
 export const trainer: Actor = {
 	name: "trainer",
 	targetBananas: (world) => world.trainerTargetBananas,
