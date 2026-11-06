@@ -716,7 +716,8 @@ function drawTimeline() {
 
 // Other actions that scored the same as the chosen one: it won only because it comes first in the list.
 function tiedActionNames(chooseCall: CallNode) {
-	const children = chooseCall.children ?? []
+	// Only the options: chooseAction also calls helpers such as availableActions.
+	const children = (chooseCall.children ?? []).filter((child) => child.functionName === "scoreAction")
 	const chosenName = (chooseCall.result as Action).name
 	const chosenScore = children.find((child) => (child.argumentValues[2] as Action).name === chosenName)?.result
 	return children.filter((child) => child.result === chosenScore && (child.argumentValues[2] as Action).name !== chosenName).map((child) => (child.argumentValues[2] as Action).name)
@@ -1069,7 +1070,7 @@ function createDecisionNode(decision: CallNode, isPrediction: boolean): HTMLDivE
 	const actor = argument(decision, "actor") as Actor
 	const world = argument(decision, "world") as World
 	const head = `<span class="label">${isPrediction ? "predict: " : ""}<b class="${actor.name}">${actor.name}</b> chooses <span class="muted">depth ${argument(decision, "searchDepth")}, wants ${targetOf(actor.name, world)}</span></span>${tieBadge(decision)}<span class="result">${escapeHtml((decision.result as Action).name)}</span>`
-	const { node, row } = makeRow("decision", head, decision, true, () => recordedChildren(decision).map((option) => createOptionNode(option, decision)))
+	const { node, row } = makeRow("decision", head, decision, true, () => recordedChildren(decision).filter((child) => child.functionName === "scoreAction").map((option) => createOptionNode(option, decision)))
 	if (!isPrediction) row.setOpen(true)
 	return node
 }
