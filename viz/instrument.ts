@@ -26,7 +26,10 @@ export function instrumentSource(source: string) {
 			? `return __instrument.callCached(${JSON.stringify(functionName)}, ${untraced}, [${argumentList}])`
 			: `return ${untraced}(${argumentList})`
 		wrappers.push(`${exportKeyword ?? ""}function ${functionName}(${parameterNames.map((name) => `${name}: any`).join(", ")}): any {
-	if (!__instrument.isRecording) { ${fastPath} }
+	if (!__instrument.isRecording) {
+		if (__instrument.hook) { const hooked = __instrument.hook(${JSON.stringify(functionName)}, [${argumentList}]); if (hooked) return hooked.value }
+		${fastPath}
+	}
 	return __instrument.callWhileRecording(${JSON.stringify(functionName)}, ${JSON.stringify(parameterNames)}, [${argumentList}], ${untraced}, ${functionName}, ${CACHED_FUNCTIONS.has(functionName)})
 }`)
 		return `function ${untraced}(${parameters})`
