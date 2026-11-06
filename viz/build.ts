@@ -20,7 +20,9 @@ if (!build.success) {
 const bundle = await build.outputs[0]!.text()
 
 const coreSources = Object.fromEntries(["core/search.ts", "core/world.ts"].map((file) => [file, readFileSync(join(projectDirectory, file), "utf8")]))
+const dockviewCss = readFileSync(join(projectDirectory, "node_modules", "dockview", "dist", "styles", "dockview.css"), "utf8")
 const page = readFileSync(join(vizDirectory, "app", "index.html"), "utf8")
+	.replace("/*DOCKVIEW_CSS*/", () => dockviewCss.replaceAll("</", "<\/"))
 	.replace("/*CORE_SOURCES*/", () => `const coreSources = ${JSON.stringify(coreSources).replaceAll("</", "<\\/")}`)
 	.replace("/*BUNDLE*/", () => bundle.replaceAll("</script", "<\\/script"))
 

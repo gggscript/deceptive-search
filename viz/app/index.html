@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>deceptive-search</title>
 <script>document.documentElement.dataset.theme = localStorage.getItem("theme") ?? "dark"</script>
+<style>/*DOCKVIEW_CSS*/</style>
 <style>
 	:root {
 		--bg: #ffffff; --surface: #ffffff; --text: #1f2328; --muted: #6e7781; --muted-strong: #57606a;
@@ -29,10 +30,15 @@
 		color-scheme: dark;
 	}
 	* { box-sizing: border-box }
-	body { margin: 0; font: 14px/1.45 system-ui, sans-serif; color: var(--text); background: var(--bg); height: 100vh; display: grid; grid-template-rows: auto 1fr }
+	body { margin: 0; font: 14px/1.45 system-ui, sans-serif; color: var(--text); background: var(--bg); height: 100vh; overflow: hidden; display: grid; grid-template-rows: auto 1fr }
 	header { padding: 8px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center }
 	header h1 { font-size: 15px; margin: 0 }
-	#parameters { display: flex; gap: 12px; flex-wrap: wrap }
+	#parameters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
+	.parameter-group { display: flex; gap: 10px; align-items: center; margin: 0; padding: 3px 8px 3px 4px; border: 1px solid var(--line); border-radius: 6px; --group: var(--muted) }
+	.parameter-group legend { float: left; padding: 0 4px 0 2px; font-size: 12px; font-weight: 600; color: var(--group) }
+	.parameter-group.agent { --group: var(--agent); border-color: color-mix(in srgb, var(--agent) 45%, transparent); background: color-mix(in srgb, var(--agent) 7%, transparent) }
+	.parameter-group.trainer { --group: var(--trainer); border-color: color-mix(in srgb, var(--trainer) 45%, transparent); background: color-mix(in srgb, var(--trainer) 7%, transparent) }
+	.parameter-group.world { --group: var(--bananas); border-color: color-mix(in srgb, var(--bananas) 45%, transparent); background: color-mix(in srgb, var(--bananas) 7%, transparent) }
 	label { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px }
 	input[type=number] { width: 4.2em; font: 13px var(--mono); padding: 2px 4px; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg); color: var(--text) }
 	select { font: 13px system-ui; padding: 1px 2px; background: var(--input-bg); color: var(--text); border: 1px solid var(--input-border); border-radius: 4px }
@@ -43,9 +49,25 @@
 	button:hover { background: var(--hover) } button:active { background: var(--active) }
 	.hint { color: var(--muted); font-size: 12px; margin-left: auto }
 	kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg-soft) }
-	main { display: grid; grid-template-columns: 510px minmax(0, 1fr) minmax(0, 0.95fr); min-height: 0 }
-	main > section { overflow: auto; min-height: 0; border-right: 1px solid var(--line); padding-bottom: 24px }
-	h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 12px 6px }
+	#dock { min-height: 0; min-width: 0 }
+	.pane { height: 100%; overflow: auto; padding: 8px 0 24px; background: var(--bg) }
+	.pane-toolbar { display: flex; justify-content: flex-end; padding: 0 12px 4px }
+	#panel-toggles { display: inline-flex }
+	#panel-toggles button { border-radius: 0; margin-left: -1px; color: var(--muted) }
+	#panel-toggles button:first-child { border-radius: 6px 0 0 6px; margin-left: 0 }
+	#panel-toggles button:last-child { border-radius: 0 6px 6px 0 }
+	/* closed panel: plain outline, muted. open panel: filled with a link-blue tint. */
+	#panel-toggles button[aria-pressed="false"] { background: transparent }
+	#panel-toggles button[aria-pressed="false"]:hover { background: var(--hover); color: var(--text) }
+	#panel-toggles button[aria-pressed="true"] { color: var(--text); background: color-mix(in srgb, var(--link) 16%, var(--bg)); border-color: color-mix(in srgb, var(--link) 45%, var(--input-border)); position: relative }
+	#panel-toggles button[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--link) 24%, var(--bg)) }
+	#panel-toggles button:active { background: var(--active) }
+	/* Dockview themes: keep its chrome in this page's colors. */
+	.dockview-theme-github-dark, .dockview-theme-github-light {
+		--dv-group-view-background-color: var(--bg); --dv-tabs-and-actions-container-background-color: var(--bg-soft);
+		--dv-activegroup-visiblepanel-tab-background-color: var(--bg); --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg);
+		--dv-separator-border: var(--line); --dv-tabs-and-actions-container-font-size: 13px;
+	}
 	.panel { margin: 0 12px }
 	.muted { color: var(--muted) } .small { font-size: 12px }
 	.agent { color: var(--agent) } .trainer { color: var(--trainer) }
@@ -60,9 +82,23 @@
 	.ramp { display: inline-flex; vertical-align: middle; margin-left: 4px }
 	.ramp-step { width: 18px; text-align: center; font-size: 10px; line-height: 14px }
 	.legend i.dashed { background: repeating-linear-gradient(90deg, var(--agent) 0 4px, transparent 4px 7px) }
+	.legend i.dotted { background: repeating-linear-gradient(90deg, var(--muted-strong) 0 2px, transparent 2px 4px) }
+	.legend i.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-strong) }
 	#timeline svg { cursor: pointer; display: block }
+	#run-switch { display: inline-flex; flex-wrap: wrap; margin-bottom: 4px }
+	#run-switch button { font-size: 12px; padding: 1px 8px; border-radius: 0; margin-left: -1px; background: transparent; color: var(--muted) }
+	#run-switch button:first-child { border-radius: 6px 0 0 6px; margin-left: 0 }
+	#run-switch button:last-child { border-radius: 0 6px 6px 0 }
+	#run-switch button[aria-pressed="true"] { color: var(--text); background: color-mix(in srgb, var(--link) 16%, var(--bg)); border-color: color-mix(in srgb, var(--link) 45%, var(--input-border)); position: relative }
 
 	#tooltip { position: fixed; z-index: 10; pointer-events: none; background: var(--surface); border: 1px solid var(--input-border); border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.2); color: var(--text); max-width: 320px }
+	#step-menu { position: fixed; z-index: 11; background: var(--surface); border: 1px solid var(--input-border); border-radius: 6px; padding: 4px; box-shadow: 0 4px 12px rgba(0,0,0,.2); display: flex; flex-direction: column; min-width: 180px }
+	#step-menu[hidden] { display: none }
+	#step-menu .menu-title { font-size: 12px; color: var(--muted); padding: 2px 6px 4px }
+	#step-menu button { text-align: left; border: none; background: transparent; border-radius: 4px; padding: 3px 8px; font-family: var(--mono); font-size: 12px }
+	#step-menu button:hover { background: var(--hover) } #step-menu button:active { background: var(--active) }
+	#step-menu button.current { font-weight: 700 }
+	#step-menu button.unforce { font-family: system-ui; color: var(--muted); border-top: 1px solid var(--line); border-radius: 0 0 4px 4px; margin-top: 2px }
 	#tooltip .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px }
 
 	table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px }
@@ -74,11 +110,18 @@
 	tbody td.action:hover { background: var(--hover) }
 	tbody td.selected, tbody td.selected:hover { background: var(--select) }
 	/* the actor does something different than its previous move */
-	tbody td.changed { box-shadow: inset 3px 0 0 var(--purple) }
+	tbody td.changed { box-shadow: inset 0 2px 0 var(--purple) }
 	tbody td.differs { font-weight: 600 }
 	.pinned-action { margin-left: 6px; font-size: 11px; color: var(--muted); font-weight: 400; text-decoration: line-through }
 	.steps-scroll { position: relative; max-height: 260px; overflow: auto; margin: 0 12px; border: 1px solid var(--line); border-radius: 6px }
 	#pinned-note { font-size: 12px; margin: 4px 12px }
+	.too-slow { color: var(--tie-text); background: var(--tie-bg); border: 1px solid var(--tie-border); border-radius: 4px; padding: 2px 6px; margin-bottom: 4px }
+	.step-number { display: inline-block; min-width: 2.2em; font-size: 11px; color: var(--muted) }
+	.forced { font-size: 11px; color: var(--purple); border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; margin-left: 6px; font-weight: 500 }
+	#pinned-note button { font-size: 11px; padding: 0 6px }
+	.row button.force { font-size: 11px; padding: 0 6px; margin-left: 8px; flex: none; visibility: hidden }
+	.row:hover button.force, .row.selected button.force, .row button.force.on { visibility: visible }
+	.row button.force.on { color: var(--purple); border-color: var(--purple) }
 	.tie { font-size: 11px; color: var(--tie-text); background: var(--tie-bg); border: 1px solid var(--tie-border); border-radius: 3px; padding: 0 4px; margin-left: 6px; font-weight: 500 }
 
 	.world dl { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; margin: 6px 0 0; font-size: 13px }
@@ -99,8 +142,6 @@
 	.row.unchosen { opacity: .55 }
 	.check { width: 14px; height: 14px; color: var(--chosen); flex: none }
 	.children { border-left: 1px solid var(--line); margin-left: 15px }
-	h2.with-control { display: flex; justify-content: space-between; align-items: center; padding-right: 0 }
-	h2.with-control label { text-transform: none; letter-spacing: 0; font-weight: 400 }
 	.row.option { gap: 8px }
 	.option-action { width: 11em; flex: none; overflow: hidden; text-overflow: ellipsis }
 	.option-score { width: 3em; flex: none; text-align: right; font-family: var(--mono) }
@@ -127,40 +168,45 @@
 <header>
 	<h1>deceptive-search</h1>
 	<div id="parameters"></div>
+	<div id="panel-toggles" role="group" aria-label="panels"></div>
+	<button id="reset-layout" type="button" title="restore the default panel layout">reset layout</button>
 	<button id="pin" type="button"></button>
 	<button id="theme" type="button" title="switch light/dark"></button>
-	<span class="hint"><kbd>n</kbd> <kbd>p</kbd> step · <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> tree · middle-drag a number to change it · click a value in the code to step into it</span>
+	<span class="hint"><kbd>n</kbd> <kbd>p</kbd> step, <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> tree, middle-drag a number to change it, click a value in the code to step into it, <kbd>Ctrl</kbd> <kbd>Z</kbd> undo</span>
 </header>
-<main>
-	<section>
-		<h2>This run</h2>
+<main id="dock"></main>
+<!-- Panel contents. Dockview moves each into its panel; closed panels are parked here so their elements stay in the document. -->
+<div id="panel-parking" hidden>
+	<div class="pane" id="pane-run">
 		<div class="panel" id="timeline"></div>
 		<div id="pinned-note"></div>
-		<div class="panel muted small" style="margin-bottom:4px">one row per round · <span style="box-shadow: inset 3px 0 0 var(--purple); padding-left: 6px">marked</span> = different action than that actor's previous move · click an action to inspect it</div>
+		<div class="panel muted small" style="margin-bottom:4px">one row per round, right-click an action to force another, <span style="box-shadow: inset 0 2px 0 var(--purple); padding-top: 2px">line above</span> = different action than that actor's previous move, click an action to inspect it</div>
 		<div class="steps-scroll">
 			<table><thead id="steps-head"></thead><tbody id="steps"></tbody></table>
 		</div>
-		<h2 id="world-title">World</h2>
+	</div>
+	<div class="pane" id="pane-world">
 		<div class="panel world" id="world"></div>
-		<h2>Across parameters</h2>
+	</div>
+	<div class="pane" id="pane-sweep">
 		<div class="panel">
 			<div id="sweep-controls"></div>
 			<div class="legend" id="sweep-legend"></div>
 			<div id="sweep"></div>
 			<div id="sweep-status" class="muted small"></div>
 		</div>
-	</section>
-	<section>
-		<h2 class="with-control">Decision of the selected step <label><input type="checkbox" id="show-all-calls"> show all calls</label></h2>
+	</div>
+	<div class="pane" id="pane-decision">
+		<div class="pane-toolbar"><label><input type="checkbox" id="show-all-calls"> show all calls</label></div>
 		<div id="tree"></div>
-	</section>
-	<section>
-		<h2>Code of the selected call</h2>
+	</div>
+	<div class="pane" id="pane-code">
 		<div class="code-title" id="code-title"></div>
 		<div class="code" id="code"></div>
-	</section>
-</main>
+	</div>
+</div>
 <div id="tooltip" hidden></div>
+<div id="step-menu" hidden></div>
 <script>/*CORE_SOURCES*/</script>
 <script type="module">/*BUNDLE*/</script>
 </body>
