@@ -12,6 +12,7 @@ import { createDockview, themeGithubDark, themeGithubLight, type AddPanelOptions
 declare const coreSources: Record<string, string>
 declare const buildCommit: string // the commit this page was built from (viz/build.ts)
 declare const buildIsDirty: boolean // built with uncommitted changes
+const REPOSITORY_URL = "https://github.com/gggscript/deceptive-search"
 declare const workerSource: string // viz/app/worker.ts, bundled (viz/build.ts)
 
 /* ---------- the worker: searches run there, so the page never freezes ---------- */
@@ -1294,11 +1295,15 @@ function renderCode(call: CallNode) {
 		return
 	}
 	if (call.children === null) call.children = recordCalls(3, call.rerun).children
-	element("code-title").textContent = `${location.file}:${location.startLine + 1}`
 	const lines = sourceLines[location.file]!
 	const lastExecutedLine = returnLineIndex(call, location)
 	let firstLine = location.startLine
 	while (firstLine > 0 && lines[firstLine - 1]!.startsWith("//")) firstLine--
+	const title = element<HTMLAnchorElement>("code-title")
+	title.textContent = `${location.file}:${location.startLine + 1}`
+	// The commit this page was built from, so the lines match (unless the build had uncommitted changes).
+	title.href = `${REPOSITORY_URL}/blob/${buildCommit}/${location.file}#L${firstLine + 1}-L${location.endLine + 1}`
+	title.title = buildIsDirty ? `on GitHub, commit ${buildCommit} (this build has uncommitted changes, so lines may differ)` : `on GitHub, commit ${buildCommit}`
 	let html = ""
 	for (let index = firstLine; index <= location.endLine; index++) {
 		const line = lines[index]!
