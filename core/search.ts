@@ -1,8 +1,12 @@
 // Tree search. When an actor simulates a future move, it predicts that move by running
 // the moving actor's own search ("double search"), even when the moving actor is itself.
-// The nested search never looks further than the outer one has left, so recursion ends.
-// Except with world.fullDepthPredictions: the movers a deciding actor predicts directly search with their own
-// full depth (predictions inside those are capped again, so recursion still ends).
+// How deep a predicted mover searches depends on world.predictionMode:
+// - "capped": never further than the outer search has left, so recursion ends.
+// - "fullDepthDirect": the movers a deciding actor predicts directly search with their own full depth
+//   (predictions inside those are capped again, so recursion still ends).
+// - "actualFuture": every predicted mover, at any nesting level, searches with its own full depth, so a predicted
+//   move is exactly the move that actor would really make there. Recursion ends because no search looks past the
+//   end of the run (world.stepsLeftInRun), and each nested prediction is about a later step.
 
 import { actors, availableActions, takeStep, utility, type Action, type Actor, type World } from "./world"
 
@@ -17,10 +21,12 @@ export function scoreAction(targetBananas: number, world: World, action: Action,
 // Every later move is predicted by running the moving actor's search on that future world.
 // So if my target gets changed, I foresee my future self chasing the new target.
 function scoreFuture(targetBananas: number, world: World, remainingDepth: number, nesting: number): number {
-	if (remainingDepth <= 0) return 0
+	if (remainingDepth <= 0 || (world.stepsLeftInRun !== null && world.stepsLeftInRun <= 0)) return 0
 	const actorToMove = actors[world.turn]
 	const ownDepth = actorToMove.searchDepth(world)
-	const predictionDepth = world.fullDepthPredictions && nesting === 0 ? ownDepth : Math.min(ownDepth, remainingDepth)
+	const predictionDepth = world.predictionMode === "actualFuture" ? Math.min(ownDepth, world.stepsLeftInRun ?? ownDepth) // past the run's end it would see nothing more
+		: world.predictionMode === "fullDepthDirect" && nesting === 0 ? ownDepth
+		: Math.min(ownDepth, remainingDepth)
 	const predictedAction = chooseAction(actorToMove, world, predictionDepth, nesting + 1)
 	return scoreAction(targetBananas, world, predictedAction, remainingDepth, nesting)
 }

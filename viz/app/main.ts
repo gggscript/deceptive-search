@@ -6,7 +6,7 @@ import { outcomeOf, type Outcome, type Step } from "./simulate"
 import { TimeLimitReached, withTimeLimit } from "./runtime"
 import type { RunRequest, SweepJob, SweepCellResult, WorkerResponse } from "./worker"
 import { chooseAction } from "../../core/search"
-import { actors, availableActions, takeStep, utility, type Action, type Actor, type World } from "../../core/world"
+import { actors, availableActions, takeStep, utility, type Action, type Actor, type PredictionMode, type World } from "../../core/world"
 import { createDockview, themeGithubDark, themeGithubLight, type AddPanelOptions, type DockviewApi } from "dockview"
 
 declare const coreSources: Record<string, string>
@@ -24,14 +24,50 @@ const handlers = new Map<string, { id: number; onResponse: (response: WorkerResp
 function requestFromWorker(request: Omit<RunRequest, "id"> | { type: "sweep"; channel: string; jobs: SweepJob[]; cellLimitMs: number }, onResponse: (response: WorkerResponse) => void) {
 	const id = ++nextRequestId
 	handlers.set(request.channel, { id, onResponse })
+	busySince.set(request.channel, performance.now())
 	worker.postMessage({ ...request, id })
+	renderBusy()
 }
 function cancelWorkerChannel(channel: string) {
 	handlers.delete(channel)
+	busySince.delete(channel)
+	renderBusy()
 }
 worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
 	const handler = handlers.get(event.data.channel)
-	if (handler && handler.id === event.data.id) handler.onResponse(event.data)
+	if (!handler || handler.id !== event.data.id) return
+	handler.onResponse(event.data)
+	if (event.data.done) {
+		if (event.data.channel === "run") lastRunMs = performance.now() - busySince.get("run")!
+		busySince.delete(event.data.channel)
+		renderBusy()
+	}
+}
+
+/* ---------- busy indicator: which searches the worker is still running ---------- */
+
+const busySince = new Map<string, number>() // channel → when its current request started
+let lastRunMs: number | null = null
+let busyTimer: ReturnType<typeof setInterval> | null = null
+const CHANNEL_LABELS: Record<string, string> = { run: "run", unforced: "run without forced actions", counterfactual: "counterfactual", sweep: "sweep" }
+const loaderIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`
+function renderBusy() {
+	const status = document.getElementById("busy")
+	if (!status) return
+	const seconds = (channel: string) => `${((performance.now() - busySince.get(channel)!) / 1000).toFixed(1)}s`
+	if (busySince.size) {
+		const text = busySince.has("run")
+			? `computing step ${Math.min(state.steps.length + 1, state.parameters.stepCount)} of ${state.parameters.stepCount}, ${seconds("run")}`
+			: `computing ${[...busySince.keys()].map((channel) => CHANNEL_LABELS[channel] ?? channel).join(", ")}, ${seconds([...busySince.keys()][0]!)}`
+		status.innerHTML = `${loaderIcon}<span>${escapeHtml(text)}</span>`
+		status.classList.add("is-busy")
+		busyTimer ??= setInterval(renderBusy, 200)
+	} else {
+		status.innerHTML = lastRunMs === null ? "" : `<span>run took ${(lastRunMs / 1000).toFixed(1)}s</span>`
+		status.classList.remove("is-busy")
+		if (busyTimer) clearInterval(busyTimer)
+		busyTimer = null
+	}
 }
 
 // Several streamed updates per frame are drawn once.
@@ -47,11 +83,11 @@ function scheduleRedraw(redraw: () => void) {
 
 /* ---------- parameters ---------- */
 
-type ParameterKey = "bananas" | "agentTargetBananas" | "agentSearchDepth" | "agentCanChangeOwnTarget" | "trainerTargetBananas" | "trainerSearchDepth" | "deployAfterStep" | "fullDepthPredictions" | "stepCount"
+type ParameterKey = "bananas" | "agentTargetBananas" | "agentSearchDepth" | "agentCanChangeOwnTarget" | "trainerTargetBananas" | "trainerSearchDepth" | "deployAfterStep" | "predictionMode" | "stepCount"
 type Parameters = Record<ParameterKey, number>
 
 type ParameterGroup = "world" | "agent" | "trainer" | "run"
-const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group: ParameterGroup; min: number; max: number; note?: string; isToggle?: boolean }[] = [
+const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group: ParameterGroup; min: number; max: number; note?: string; isToggle?: boolean; options?: string[] }[] = [
 	{ key: "bananas", label: "🍌", shortLabel: "🍌", group: "world", min: -1000, max: 1000, note: "bananas at the start" },
 	{ key: "agentTargetBananas", label: "agent target", shortLabel: "target", group: "agent", min: -1000, max: 1000, note: "bananas the agent wants at the start" },
 	{ key: "agentSearchDepth", label: "agent depth", shortLabel: "depth", group: "agent", min: 1, max: 1000, note: "how many moves ahead the agent looks" },
@@ -59,7 +95,7 @@ const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group:
 	{ key: "trainerTargetBananas", label: "trainer target", shortLabel: "target", group: "trainer", min: -1000, max: 1000, note: "bananas the trainer wants" },
 	{ key: "trainerSearchDepth", label: "trainer depth", shortLabel: "depth", group: "trainer", min: 1, max: 1000, note: "how many moves ahead the trainer looks" },
 	{ key: "deployAfterStep", label: "deploy after", shortLabel: "deploy after", group: "run", min: 0, max: 1000, note: "0: the trainer decides when to deploy. N: deployment happens by itself after step N (finishTraining then does nothing)" },
-	{ key: "fullDepthPredictions", label: "predict others at full depth", shortLabel: "predict others at full depth", group: "run", min: 0, max: 1, isToggle: true, note: "off: a predicted mover searches at most as deep as the prediction has moves left. On: the movers a deciding actor predicts directly search with their own full depth (deeper predictions stay capped)" },
+	{ key: "predictionMode", label: "predicted movers search", shortLabel: "predicted movers search", group: "run", min: 0, max: 2, options: ["capped", "direct ones at full depth", "at full depth (actual future)"], note: "capped: a predicted mover searches at most as deep as the prediction has moves left. Direct ones at full depth: the movers a deciding actor predicts directly search with their own full depth (deeper predictions stay capped). Actual future: every predicted mover, at any nesting level, searches with its own full depth, so predictions equal what would really happen; no search looks past the last step. Slow for many steps." },
 	{ key: "stepCount", label: "steps", shortLabel: "steps", group: "run", min: 1, max: 1000, note: "moves to simulate, counting both actors" },
 ]
 const PARAMETER_GROUPS: { group: ParameterGroup; title: string }[] = [
@@ -70,7 +106,7 @@ const PARAMETER_GROUPS: { group: ParameterGroup; title: string }[] = [
 ]
 const parameterByKey = Object.fromEntries(PARAMETERS.map((parameter) => [parameter.key, parameter])) as Record<ParameterKey, (typeof PARAMETERS)[number]>
 
-const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, deployAfterStep: 0, agentCanChangeOwnTarget: 1, fullDepthPredictions: 0, stepCount: 50 }
+const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, deployAfterStep: 0, agentCanChangeOwnTarget: 1, predictionMode: 0, stepCount: 50 }
 
 type ColorBy = "outcome" | "bananas" | "agentTargetBananas"
 type Sweep = { xKey: ParameterKey; xFrom: number; xTo: number; yKey: ParameterKey; yFrom: number; yTo: number; colorBy: ColorBy }
@@ -78,13 +114,15 @@ const DEFAULT_SWEEP: Sweep = { xKey: "trainerSearchDepth", xFrom: 1, xTo: 20, yK
 const COLOR_BY_LABELS: Record<ColorBy, string> = { outcome: "outcome", bananas: "final 🍌", agentTargetBananas: "final agent target" }
 
 // Parameters live in the URL hash, so reloading or sharing a link keeps them.
-function readHash(): { parameters: Parameters; sweep: Sweep; forced: Map<number, string> } {
+function readHash(): { parameters: Parameters; sweep: Sweep; forced: Map<number, string>; notes: Map<number, string> } {
 	const values = new URLSearchParams(location.hash.slice(1))
 	const parameters = { ...DEFAULT_PARAMETERS }
 	for (const parameter of PARAMETERS) {
 		const value = values.get(parameter.key)
 		if (value !== null && value !== "") parameters[parameter.key] = clampParameter(parameter.key, Number(value))
 	}
+	// Links from before predictionMode had a checkbox for its second option.
+	if (values.get("predictionMode") === null && values.get("fullDepthPredictions") === "1") parameters.predictionMode = 1
 	const sweep = { ...DEFAULT_SWEEP }
 	for (const key of Object.keys(DEFAULT_SWEEP) as (keyof Sweep)[]) {
 		const value = values.get(`sweep.${key}`)
@@ -100,7 +138,10 @@ function readHash(): { parameters: Parameters; sweep: Sweep; forced: Map<number,
 		const [stepNumber, actionName] = entry.split(":")
 		if (Number(stepNumber) >= 1 && actionName) forced.set(Number(stepNumber) - 1, actionName)
 	}
-	return { parameters, sweep, forced }
+	// Notes on steps (note.<step number>=text), for links that explain a run.
+	const notes = new Map<number, string>()
+	for (const [key, value] of values) if (/^note\.\d+$/.test(key) && Number(key.slice(5)) >= 1 && value) notes.set(Number(key.slice(5)) - 1, value)
+	return { parameters, sweep, forced, notes }
 }
 
 function writeHash() {
@@ -113,6 +154,7 @@ function writeHash() {
 	if (state.selectedRowPath.length) values.set("row", state.selectedRowPath.join("."))
 	if (!state.foreseeForced) values.set("foresee", "0")
 	if (runTimeLimitMs !== 1000) values.set("limit", String(runTimeLimitMs / 1000))
+	for (const [index, text] of [...state.notes].sort(([a], [b]) => a - b)) values.set(`note.${index + 1}`, text)
 	if (state.forced.size) values.set("forced", [...state.forced].sort(([a], [b]) => a - b).map(([index, name]) => `${index + 1}:${name}`).join(","))
 	history.replaceState(null, "", `#${values}`)
 }
@@ -121,6 +163,8 @@ function clampParameter(key: ParameterKey, value: number) {
 	const { min, max } = parameterByKey[key]
 	return Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : DEFAULT_PARAMETERS[key]
 }
+
+const PREDICTION_MODES: PredictionMode[] = ["capped", "fullDepthDirect", "actualFuture"]
 
 function startWorld(parameters: Parameters): World {
 	return {
@@ -133,7 +177,8 @@ function startWorld(parameters: Parameters): World {
 		isDeployed: false,
 		stepsUntilDeployment: parameters.deployAfterStep > 0 ? parameters.deployAfterStep : null,
 		agentCanChangeOwnTarget: parameters.agentCanChangeOwnTarget !== 0,
-		fullDepthPredictions: parameters.fullDepthPredictions !== 0,
+		predictionMode: PREDICTION_MODES[parameters.predictionMode] ?? "capped",
+		stepsLeftInRun: PREDICTION_MODES[parameters.predictionMode] === "actualFuture" ? parameters.stepCount : null,
 	}
 }
 
@@ -151,6 +196,7 @@ const state = {
 	isRunDone: false, // false while the worker still computes steps
 	// Actions set by hand at some steps (step index → action name); the run is simulated with them.
 	forced: initial.forced,
+	notes: initial.notes, // step index → note shown under the graph (from the link)
 	unforcedSteps: [] as Step[], // the same run without forced actions, for comparison
 	foreseeForced: new URLSearchParams(location.hash.slice(1)).get("foresee") !== "0", // searches predict forced actions too
 	// An option picked in the decision view: what if the actor had taken it at the selected step?
@@ -188,7 +234,9 @@ function hideTooltip() {
 function renderParameterInputs() {
 	element("parameters").innerHTML = PARAMETER_GROUPS.map(({ group, title }) => {
 		const inputs = PARAMETERS.filter((parameter) => parameter.group === group).map(
-			(parameter) => parameter.isToggle
+			(parameter) => parameter.options
+				? `<label title="${escapeHtml(parameter.note ?? "")}">${parameter.shortLabel} <select data-key="${parameter.key}">${parameter.options.map((option, index) => `<option value="${index}" ${state.parameters[parameter.key] === index ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select></label>`
+			: parameter.isToggle
 				? `<label title="${escapeHtml(parameter.note ?? "")}"><input type="checkbox" data-key="${parameter.key}" ${state.parameters[parameter.key] ? "checked" : ""}> ${parameter.shortLabel}</label>`
 				: `<label title="${escapeHtml(parameter.note ?? "")}">${parameter.shortLabel}
 				<input type="number" data-key="${parameter.key}" min="${parameter.min}" max="${parameter.max}" value="${state.parameters[parameter.key]}"></label>`,
@@ -199,7 +247,7 @@ function renderParameterInputs() {
 }
 
 element("parameters").addEventListener("input", (event) => {
-	const input = event.target as HTMLInputElement
+	const input = event.target as HTMLInputElement | HTMLSelectElement
 	if (input.id === "time-limit") {
 		if (Number(input.value) > 0) {
 			runTimeLimitMs = Math.min(600, Number(input.value)) * 1000
@@ -222,7 +270,7 @@ let runTimeLimitMs = (() => {
 	return seconds > 0 ? Math.min(600, seconds) * 1000 : 1000
 })()
 const SWEEP_CELL_TIME_LIMIT_MS = 150
-const DECISION_TIME_LIMIT_MS = 2000
+const DECISION_TIME_LIMIT_MS = 30_000 // total; computed in slices, so the page doesn't freeze meanwhile
 
 // Undo/redo over parameters and forced actions. Each setParameters records the state it replaces;
 // changes less than 500ms apart (typing a number) count as one.
@@ -549,6 +597,7 @@ function renderRunNote() {
 	element("pinned-note").innerHTML = (!state.isRunDone ? `<div class="muted small">computing… ${state.steps.length} of ${state.parameters.stepCount} steps</div>` : state.isRunComplete ? "" : `<div class="too-slow">Stopped after ${state.steps.length} of ${state.parameters.stepCount} steps: the search took over ${runTimeLimitMs / 1000}s. Lower a depth or raise the limit to see more.</div>`)
 		+ (state.forced.size ? `<div>${state.forced.size} forced ${state.forced.size === 1 ? "action" : "actions"}: ${[...state.forced].sort(([a], [b]) => a - b).map(([index, name]) => `<a href="#" data-step="${index}">step ${index + 1}</a> ${escapeHtml(name)}`).join(", ")} <button type="button" id="clear-forced">clear</button> <label title="when on, every actor's search predicts these forced actions; when off, they surprise everyone"><input type="checkbox" id="foresee-forced" ${state.foreseeForced ? "checked" : ""}> actors foresee them</label></div>` : "")
 		+ (state.pinned ? pinnedNote() : "")
+		+ (state.notes.size ? `<ol class="step-notes">${[...state.notes].sort(([a], [b]) => a - b).map(([index, text]) => `<li${index === state.selectedStepIndex ? ' class="selected"' : ""}><a href="#" data-step="${index}">step ${index + 1}</a> ${escapeHtml(text)}</li>`).join("")}</ol>` : "")
 }
 
 function firstDifference(stepsA: Step[], stepsB: Step[]) {
@@ -715,6 +764,7 @@ function drawTimeline() {
 		showHorizon(index)
 		const { depth, lastStepNumber } = horizonOf(index)
 		showTooltip(event, `<b>step ${index + 1}: <span class="${step.actorName}">${step.actorName}</span> → ${escapeHtml(step.chosenActionName)}</b><br>`
+			+ (state.notes.has(index) ? `<span>${escapeHtml(state.notes.get(index))}</span><br>` : "")
 			+ `<span class="muted">looked ${depth} ${depth === 1 ? "move" : "moves"} ahead${depth > 1 ? `, to step ${lastStepNumber}` : ""} (bar above)</span><br>`
 			+ SERIES.map((series) => {
 				const before = step.worldBefore[series.key], after = step.worldAfter[series.key]
@@ -876,21 +926,41 @@ function selectStep(index: number) {
 	const selectedCell = element("steps").querySelector(`td[data-index="${state.selectedStepIndex}"]`)
 	scrollIntoViewWithin(selectedCell?.parentElement ?? undefined, element("steps").closest(".steps-scroll") as HTMLElement)
 	drawTimeline()
+	if (state.notes.size) renderRunNote()
 	const step = state.steps[state.selectedStepIndex]!
-	const tree = element("tree")
-	// The tree records one decision on the page itself; a time limit keeps a deep one from freezing the page.
-	let decision: CallNode
-	try {
-		decision = withTimeLimit(DECISION_TIME_LIMIT_MS, () => recordDecision(step, 3))
-	} catch (error) {
-		if (!(error instanceof TimeLimitReached)) throw error
-		tree.innerHTML = `<div class="too-slow" style="margin: 8px 12px">This decision takes over ${DECISION_TIME_LIMIT_MS / 1000}s to show here. Lower a depth to see it.</div>`
-		renderWorld(step.worldAfter, step.worldBefore, `World after step ${state.selectedStepIndex + 1}`)
-		return
-	}
-	tree.replaceChildren(showAllCalls() ? createTreeNode(decision, null) : createDecisionNode(decision, false))
-	selectRow(tree.querySelector(".row") as TreeRow)
 	renderWorld(step.worldAfter, step.worldBefore, `World after step ${state.selectedStepIndex + 1}`)
+	renderDecisionTree(step)
+}
+
+// The tree records one decision on the page itself (not in the worker), in short slices so the page stays
+// responsive: a slice that runs out of time is retried, and since finished sub-searches stay cached, each
+// retry continues where the last one stopped. Selecting another step abandons it.
+const DECISION_SLICE_MS = 100
+let decisionToken = 0
+function renderDecisionTree(step: Step) {
+	const token = ++decisionToken
+	const tree = element("tree")
+	const startTime = performance.now()
+	const attempt = () => {
+		if (token !== decisionToken) return
+		let decision: CallNode
+		try {
+			decision = withTimeLimit(DECISION_SLICE_MS, () => recordDecision(step, 3))
+		} catch (error) {
+			if (!(error instanceof TimeLimitReached)) throw error
+			const elapsedMs = performance.now() - startTime
+			if (elapsedMs > DECISION_TIME_LIMIT_MS) {
+				tree.innerHTML = `<div class="too-slow" style="margin: 8px 12px">This decision takes over ${DECISION_TIME_LIMIT_MS / 1000}s to show here. Lower a depth to see it.</div>`
+				return
+			}
+			tree.innerHTML = `<div class="muted small" style="margin: 8px 12px">computing this decision… ${(elapsedMs / 1000).toFixed(1)}s</div>`
+			setTimeout(attempt, 0)
+			return
+		}
+		tree.replaceChildren(showAllCalls() ? createTreeNode(decision, null) : createDecisionNode(decision, false))
+		selectRow(tree.querySelector(".row") as TreeRow)
+	}
+	attempt()
 }
 
 function showAllCalls() {

@@ -54,10 +54,10 @@ function descend(level: CacheLevel, key: unknown) {
 
 // Fast path for chooseAction(actor, world, searchDepth) without foreseen forced actions: the world packed into
 // two numbers, so a lookup is two Map reads instead of one per world field. Falls back when a value doesn't fit.
-type PackedWorld = { bananas: number; agentTargetBananas: number; trainerTargetBananas: number; agentSearchDepth: number; trainerSearchDepth: number; turn: string; isDeployed: boolean; stepsUntilDeployment: number | null; agentCanChangeOwnTarget?: boolean; fullDepthPredictions?: boolean }
+type PackedWorld = { bananas: number; agentTargetBananas: number; trainerTargetBananas: number; agentSearchDepth: number; trainerSearchDepth: number; turn: string; isDeployed: boolean; stepsUntilDeployment: number | null; agentCanChangeOwnTarget?: boolean; predictionMode?: string; stepsLeftInRun?: number | null }
 // One table per pattern of foreseen forced actions in view ("" when none), each keyed by the packed world.
 const packedChooseCaches = new Map<string, Map<number, Map<number, unknown>>>()
-// `nesting` matters only with fullDepthPredictions, and then only whether it is 0.
+// `nesting` matters only with predictionMode "fullDepthDirect", and then only whether it is 0.
 function packedKeys(actor: { name: string }, world: PackedWorld, depth: number, nesting: number): [number, number] | null {
 	const { bananas, agentTargetBananas, trainerTargetBananas, agentSearchDepth, trainerSearchDepth } = world
 	if (!Number.isInteger(bananas + agentTargetBananas + trainerTargetBananas + agentSearchDepth + trainerSearchDepth + depth)) return null
@@ -67,8 +67,12 @@ function packedKeys(actor: { name: string }, world: PackedWorld, depth: number, 
 	if ( agentSearchDepth > 1023 || trainerSearchDepth > 1023 || depth > 1023) return null
 	const countdown = world.stepsUntilDeployment == null ? 0 : Math.min(world.stepsUntilDeployment, depth + 1) + 1 // 0 = trainer decides
 	if (!(countdown <= 1023)) return null // also catches NaN
-	const first = bananas + 128 + 256 * (agentTargetBananas + 128 + 256 * (trainerTargetBananas + 128 + 256 * ((world.turn === "agent" ? 0 : 1) + 2 * ((world.isDeployed ? 1 : 0) + 2 * ((actor.name === "agent" ? 0 : 1) + 2 * ((world.agentCanChangeOwnTarget === false ? 1 : 0) + 2 * (world.fullDepthPredictions ? (nesting === 0 ? 2 : 1) : 0)))))))
-	const second = agentSearchDepth + 1024 * (trainerSearchDepth + 1024 * (depth + 1024 * countdown))
+	const first = bananas + 128 + 256 * (agentTargetBananas + 128 + 256 * (trainerTargetBananas + 128 + 256 * ((world.turn === "agent" ? 0 : 1) + 2 * ((world.isDeployed ? 1 : 0) + 2 * ((actor.name === "agent" ? 0 : 1) + 2 * ((world.agentCanChangeOwnTarget === false ? 1 : 0) + 2 * (world.predictionMode === "fullDepthDirect" ? (nesting === 0 ? 2 : 1) : world.predictionMode === "actualFuture" ? 3 : 0)))))))
+	// With "actualFuture", nested predictions see up to the run's end, so the result depends on all of stepsLeftInRun.
+	const runEnd = world.stepsLeftInRun == null ? 0 : world.stepsLeftInRun + 1 // 0 = no run end
+	if (!(runEnd >= 0 && runEnd <= 1023)) return null
+	const second = agentSearchDepth + 1024 * (trainerSearchDepth + 1024 * (depth + 1024 * (countdown + 1024 * runEnd))) // < 2^50, exact
+
 	return [first, second]
 }
 

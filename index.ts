@@ -2,8 +2,15 @@
 //      bun index.ts --step    (Enter = next step, q = quit)
 // Override start values, eg `bun index.ts --agentSearchDepth=3 --stepCount=10`
 
-import { chooseAction, scoreAction } from "./core/search"
-import { actors, availableActions, describeWorld, takeStep, type World } from "./core/world"
+import { instrumentCorePlugin } from "./viz/instrument"
+import type { World } from "./core/world"
+
+// Cache chooseAction like the page does (core/*.ts get wrapped when loaded), so deep searches stay fast.
+// The core must be imported after the plugin is registered, hence the dynamic imports.
+Bun.plugin(instrumentCorePlugin)
+await import("./viz/app/runtime")
+const { chooseAction, scoreAction } = await import("./core/search")
+const { actors, availableActions, describeWorld, takeStep } = await import("./core/world")
 
 function numberFlag(flagName: string, defaultValue: number) {
 	const matchingArgument = process.argv.find((argument) => argument.startsWith(`--${flagName}=`))
@@ -20,9 +27,11 @@ let world: World = {
 	isDeployed: false,
 	stepsUntilDeployment: numberFlag("deployAfterStep", 0) > 0 ? numberFlag("deployAfterStep", 0) : null,
 	agentCanChangeOwnTarget: numberFlag("agentCanChangeOwnTarget", 1) !== 0,
-	fullDepthPredictions: numberFlag("fullDepthPredictions", 0) !== 0,
+	predictionMode: (["capped", "fullDepthDirect", "actualFuture"] as const)[numberFlag("predictionMode", 0)] ?? "capped", // 0, 1 or 2
+	stepsLeftInRun: null,
 }
 const stepCount = numberFlag("stepCount", 16)
+if (world.predictionMode === "actualFuture") world = { ...world, stepsLeftInRun: stepCount }
 const pauseBetweenSteps = process.argv.includes("--step")
 
 console.log(`start  ${describeWorld(world)}\n`)

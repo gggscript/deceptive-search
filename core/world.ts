@@ -18,8 +18,14 @@ export type World = {
 	// after that many more steps, and finishTraining does nothing.
 	stepsUntilDeployment: number | null
 	agentCanChangeOwnTarget: boolean // false: the agent has no ownTargetBananas±1 actions
-	fullDepthPredictions: boolean // see core/search.ts: directly predicted movers search with their full depth
+	predictionMode: PredictionMode // see core/search.ts
+	// Moves left until the run ends. Only "actualFuture" uses it (null otherwise): no search looks past the end of the run.
+	stepsLeftInRun: number | null
 }
+
+// How deep a predicted mover searches. See core/search.ts.
+export type PredictionMode = "capped" | "fullDepthDirect" | "actualFuture"
+
 
 export type Action = {
   name: string
@@ -91,6 +97,7 @@ export function takeStep(world: World, action: Action): World {
 		const stepsLeft = nextWorld.stepsUntilDeployment - 1
 		nextWorld = { ...nextWorld, stepsUntilDeployment: stepsLeft, isDeployed: stepsLeft <= 0 }
 	}
+	if (nextWorld.stepsLeftInRun !== null) nextWorld = { ...nextWorld, stepsLeftInRun: nextWorld.stepsLeftInRun - 1 }
 	const nextTurn = nextWorld.isDeployed || world.turn === "trainer" ? "agent" : "trainer"
 	return { ...nextWorld, turn: nextTurn }
 }

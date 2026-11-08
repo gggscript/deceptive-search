@@ -54,6 +54,12 @@
 	button:hover { background: var(--hover) } button:active { background: var(--active) }
 	.hint { color: var(--muted); font-size: 12px; margin-left: auto }
 	kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg-soft) }
+	/* Fixed width, so the header doesn't shift as the text changes. */
+	#busy { display: inline-flex; align-items: center; gap: 4px; width: 15em; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+	#busy.is-busy { color: var(--text) }
+	#busy svg { width: 14px; height: 14px; flex: none; animation: spin 1s linear infinite }
+	@keyframes spin { to { transform: rotate(360deg) } }
+	@media (prefers-reduced-motion: reduce) { #busy svg { animation: none } }
 	#dock { min-height: 0; min-width: 0 }
 	.pane { height: 100%; overflow: auto; padding: 8px 0 24px; background: var(--bg) }
 	.pane-toolbar { display: flex; justify-content: flex-end; padding: 0 12px 4px }
@@ -126,6 +132,10 @@
 	.step-number { display: inline-block; min-width: 2.2em; font-size: 11px; color: var(--muted) }
 	.forced { font-size: 11px; color: var(--purple); border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; margin-left: 6px; font-weight: 500 }
 	#pinned-note button { font-size: 11px; padding: 0 6px }
+	.step-notes { margin: 6px 0 2px; padding-left: 0; list-style: none; max-width: 60em }
+	.step-notes li { padding: 2px 6px; border-left: 3px solid transparent; border-radius: 2px }
+	.step-notes li.selected { border-left-color: var(--link); background: color-mix(in srgb, var(--link) 10%, transparent) }
+	.step-notes a { font-weight: 600; margin-right: 4px }
 	.row button.force { font-size: 11px; padding: 0 6px; margin-left: 8px; flex: none; visibility: hidden }
 	.row:hover button.force, .row.selected button.force, .row button.force.on { visibility: visible }
 	.row button.force.on { color: var(--purple); border-color: var(--purple) }
@@ -176,6 +186,7 @@
 <header>
 	<h1>deceptive-search</h1>
 	<div id="parameters"></div>
+	<span id="busy" title="searches still running in the background"></span>
 	<div id="panel-toggles" role="group" aria-label="panels"></div>
 	<button id="reset-layout" type="button" title="restore the default panel layout">reset layout</button>
 	<button id="copy-permalink" type="button"></button>
