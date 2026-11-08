@@ -63,4 +63,12 @@ const target = `${serverDirectory}/visualization/${commit}`
 run(["ssh", host, `mkdir -p ${target}`])
 run(["scp", "-q", join(root, "viz", "out", "index.html"), `${host}:${target}/index.html`])
 run(["ssh", host, `ln -sfn ${commit} ${serverDirectory}/visualization/latest`])
+
+// versions.json: every deployed commit, newest first, for the page's version menu (date and message from local git).
+const deployed = run(["ssh", host, `ls -1 ${serverDirectory}/visualization`]).split("\n").filter((name) => /^[0-9a-f]{7,40}$/.test(name))
+const versions = deployed.map((folder) => {
+	const [time, date, message] = run(["git", "show", "-s", "--format=%ct%x09%cs%x09%s", folder]).split("\t")
+	return { commit: folder, time: Number(time), date: date ?? "", message: message ?? "" }
+}).sort((a, b) => b.time - a.time).map(({ time, ...version }) => version)
+run(["ssh", host, `cat > ${serverDirectory}/visualization/versions.json`], { input: JSON.stringify(versions) })
 console.log(`https://${domain}/visualization/${commit}/\nhttps://${domain}/visualization/latest/ now points there`)

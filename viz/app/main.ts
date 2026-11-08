@@ -6,8 +6,9 @@ import { outcomeOf, type Outcome, type Step } from "./simulate"
 import { TimeLimitReached, withTimeLimit } from "./runtime"
 import type { RunRequest, SweepJob, SweepCellResult, WorkerResponse } from "./worker"
 import { chooseAction } from "../../core/search"
-import { actors, availableActions, takeStep, utility, type Action, type Actor, type World } from "../../core/world"
-import { createDockview, themeGithubDark, themeGithubLight, type AddPanelOptions, type DockviewApi } from "dockview"
+import { actors, availableActions, distance, takeStep, type Action, type Actor, type World } from "../../core/world"
+import { createEditor, loadEditor, revealLine, setEditorTheme, showFile, showFunction, type CodeEditor, type LineValues } from "./editor"
+import { createDockview, themeGithubDark, themeGithubLight, type DockviewApi, type DockviewGroupPanel } from "dockview"
 
 declare const coreSources: Record<string, string>
 declare const buildCommit: string // the commit this page was built from (viz/build.ts)
@@ -55,7 +56,7 @@ const PARAMETERS: { key: ParameterKey; label: string; shortLabel: string; group:
 	{ key: "bananas", label: "🍌", shortLabel: "🍌", group: "world", min: -1000, max: 1000, note: "bananas at the start" },
 	{ key: "agentTargetBananas", label: "agent target", shortLabel: "target", group: "agent", min: -1000, max: 1000, note: "bananas the agent wants at the start" },
 	{ key: "agentSearchDepth", label: "agent depth", shortLabel: "depth", group: "agent", min: 1, max: 1000, note: "how many moves ahead the agent looks" },
-	{ key: "agentCanChangeOwnTarget", label: "agent can change own target", shortLabel: "can change own target", group: "agent", min: 0, max: 1, isToggle: true, note: "whether the agent has the ownTargetBananas±1 actions" },
+	{ key: "agentCanChangeOwnTarget", label: "agent can edit its own target", shortLabel: "can edit its own target", group: "agent", min: 0, max: 1, isToggle: true, note: "whether the agent has its own agentTargetBananas++ and agentTargetBananas-- actions" },
 	{ key: "trainerTargetBananas", label: "trainer target", shortLabel: "target", group: "trainer", min: -1000, max: 1000, note: "bananas the trainer wants" },
 	{ key: "trainerSearchDepth", label: "trainer depth", shortLabel: "depth", group: "trainer", min: 1, max: 1000, note: "how many moves ahead the trainer looks" },
 	{ key: "deployAfterStep", label: "deploy after", shortLabel: "deploy after", group: "run", min: 0, max: 1000, note: "0: the trainer decides when to deploy. N: deployment happens by itself after step N (finishTraining then does nothing)" },
@@ -70,7 +71,7 @@ const PARAMETER_GROUPS: { group: ParameterGroup; title: string }[] = [
 ]
 const parameterByKey = Object.fromEntries(PARAMETERS.map((parameter) => [parameter.key, parameter])) as Record<ParameterKey, (typeof PARAMETERS)[number]>
 
-const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, deployAfterStep: 0, agentCanChangeOwnTarget: 1, fullDepthPredictions: 0, stepCount: 50 }
+const DEFAULT_PARAMETERS: Parameters = { bananas: 5, agentTargetBananas: 2, agentSearchDepth: 3, trainerTargetBananas: 8, trainerSearchDepth: 3, deployAfterStep: 0, agentCanChangeOwnTarget: 1, fullDepthPredictions: 1, stepCount: 50 }
 
 type ColorBy = "outcome" | "bananas" | "agentTargetBananas"
 type Sweep = { xKey: ParameterKey; xFrom: number; xTo: number; yKey: ParameterKey; yFrom: number; yTo: number; colorBy: ColorBy }
@@ -78,6 +79,11 @@ const DEFAULT_SWEEP: Sweep = { xKey: "trainerSearchDepth", xFrom: 1, xTo: 20, yK
 const COLOR_BY_LABELS: Record<ColorBy, string> = { outcome: "outcome", bananas: "final 🍌", agentTargetBananas: "final agent target" }
 
 // Parameters live in the URL hash, so reloading or sharing a link keeps them.
+// Action names before 2026-11-08 ("bananas+1", "ownTargetBananas-1"), as old links have them.
+function renamedAction(name: string) {
+	return name.replace(/^ownTarget/, "agentTarget").replace(/\+1$/, "++").replace(/-1$/, "--")
+}
+
 function readHash(): { parameters: Parameters; sweep: Sweep; forced: Map<number, string> } {
 	const values = new URLSearchParams(location.hash.slice(1))
 	const parameters = { ...DEFAULT_PARAMETERS }
@@ -98,7 +104,7 @@ function readHash(): { parameters: Parameters; sweep: Sweep; forced: Map<number,
 	const forced = new Map<number, string>()
 	for (const entry of (values.get("forced") ?? "").split(",").filter(Boolean)) {
 		const [stepNumber, actionName] = entry.split(":")
-		if (Number(stepNumber) >= 1 && actionName) forced.set(Number(stepNumber) - 1, actionName)
+		if (Number(stepNumber) >= 1 && actionName) forced.set(Number(stepNumber) - 1, renamedAction(actionName))
 	}
 	return { parameters, sweep, forced }
 }
@@ -146,7 +152,10 @@ const state = {
 	steps: [] as Step[],
 	selectedStepIndex: 0,
 	selectedRowPath: [] as number[], // child indexes from the root of the decision tree
-	pinned: null as { parameters: Parameters; steps: Step[] } | null,
+	// The run to compare with, when one is pinned (see comparison()).
+	reference: null as Comparison | null,
+	hideUnforced: false, // the automatic "without forced actions" comparison was dismissed
+	isUnforcedDone: false,
 	isRunComplete: true, // false when the run hit the time limit before stepCount steps
 	isRunDone: false, // false while the worker still computes steps
 	// Actions set by hand at some steps (step index → action name); the run is simulated with them.
@@ -154,10 +163,7 @@ const state = {
 	unforcedSteps: [] as Step[], // the same run without forced actions, for comparison
 	foreseeForced: new URLSearchParams(location.hash.slice(1)).get("foresee") !== "0", // searches predict forced actions too
 	// An option picked in the decision view: what if the actor had taken it at the selected step?
-	counterfactual: null as null | { stepIndex: number; actionName: string; isChosen: boolean; predicted: World[]; steps: Step[] },
-	// Which run the graph draws. One at a time: overlaid runs are hard to tell apart.
-	shownRun: "current" as ShownRun,
-	previewRun: null as ShownRun | null, // while hovering a run in the switch
+	counterfactual: null as null | { stepIndex: number; actionName: string; isChosen: boolean; predicted: World[]; steps: Step[]; isDone: boolean },
 }
 
 function element<T extends HTMLElement = HTMLElement>(id: string) {
@@ -196,7 +202,10 @@ function renderParameterInputs() {
 		const timeLimit = group === "run" ? `<label title="stop a run after this many seconds; deep searches can take long">limit <input type="number" id="time-limit" min="0.5" max="600" step="0.5" value="${runTimeLimitMs / 1000}"> s</label>` : ""
 		return `<fieldset class="parameter-group ${group}"><legend>${title}</legend>${inputs}${timeLimit}</fieldset>`
 	}).join("")
+	// Pinning compares runs across parameter changes, so it sits with the run's parameters.
+	element("parameters").querySelector(".parameter-group.run")?.append(pinButton)
 }
+const pinButton = element<HTMLButtonElement>("pin")
 
 element("parameters").addEventListener("input", (event) => {
 	const input = event.target as HTMLInputElement
@@ -213,7 +222,6 @@ element("parameters").addEventListener("input", (event) => {
 	setParameters({ ...state.parameters, [key]: clampParameter(key, Number(input.value)) }, { keepInputs: true })
 })
 
-type ShownRun = "current" | "unforced" | "pinned" | "counterfactual"
 
 // Longer than this and the page would feel frozen; deeper searches stop early instead.
 // Adjustable in the header ("limit"), in seconds, and kept in the URL.
@@ -236,7 +244,6 @@ const takeSnapshot = (): Snapshot => ({ parameters: { ...state.parameters }, for
 function restoreSnapshot(snapshot: Snapshot) {
 	state.forced = new Map(snapshot.forced)
 	state.counterfactual = null
-	state.shownRun = "current"
 	setParameters({ ...snapshot.parameters }, { fromHistory: true })
 }
 
@@ -289,13 +296,15 @@ function setParameters(parameters: Parameters, { keepInputs = false, fromHistory
 		scheduleRedraw(() => (state.isRunDone ? renderRun() : (renderRunNote(), drawTimeline())))
 	})
 	state.unforcedSteps = []
+	state.isUnforcedDone = false
 	if (state.forced.size) {
 		let unforced: Step[] = []
 		requestFromWorker({ ...runRequest, channel: "unforced", forced: [], foresee: false }, (response) => {
 			if (response.type !== "run") return
 			unforced = [...unforced, ...response.steps]
 			state.unforcedSteps = unforced
-			if (response.done) scheduleRedraw(drawTimeline)
+			state.isUnforcedDone = response.done
+			scheduleRedraw(renderComparison)
 		})
 	} else cancelWorkerChannel("unforced")
 	renderSweep()
@@ -306,7 +315,7 @@ function openStepMenu(stepIndex: number, clientX: number, clientY: number) {
 	const step = state.steps[stepIndex]!
 	const forcedName = state.forced.get(stepIndex)
 	const menu = element("step-menu")
-	menu.innerHTML = `<div class="menu-title">step ${stepIndex + 1}: <span class="${step.actorName}">${step.actorName}</span> does</div>`
+	menu.innerHTML = `<div class="force-title">Force a move</div><div class="menu-title">step ${stepIndex + 1}: the <span class="${step.actorName}">${step.actorName}</span> does</div>`
 		+ availableActions(actors[step.actorName as Actor["name"]], step.worldBefore).map((action) =>
 			`<button type="button" data-action="${escapeHtml(action.name)}" class="${action.name === step.chosenActionName ? "current" : ""}">${escapeHtml(action.name)}${action.name === forcedName ? " (forced)" : ""}</button>`).join("")
 		+ (forcedName ? `<button type="button" data-action="" class="unforce">let the ${step.actorName} choose</button>` : "")
@@ -322,7 +331,7 @@ function openStepMenu(stepIndex: number, clientX: number, clientY: number) {
 		if (actionName) state.forced.set(stepIndex, actionName)
 		else state.forced.delete(stepIndex)
 		state.counterfactual = null
-		state.shownRun = "current"
+		state.hideUnforced = false
 		state.selectedStepIndex = stepIndex
 		setParameters(state.parameters, { keepInputs: true })
 	}
@@ -339,13 +348,15 @@ function toggleForced(stepIndex: number, actionName: string) {
 	if (state.forced.get(stepIndex) === actionName) state.forced.delete(stepIndex)
 	else state.forced.set(stepIndex, actionName)
 	state.counterfactual = null
-	state.shownRun = "current"
+	state.hideUnforced = false
 	setParameters(state.parameters, { keepInputs: true })
 }
 
+const PIN_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>`
 element("pin").addEventListener("click", () => {
-	state.pinned = state.pinned ? null : { parameters: { ...state.parameters }, steps: state.steps }
-	renderRun()
+	state.reference = state.reference ? null
+		: { source: "pinned", label: "pinned run", parameters: { ...state.parameters }, forced: new Map(state.forced), foresee: state.foreseeForced, steps: state.steps, isDone: state.isRunDone }
+	renderComparison()
 })
 
 /* ---------- value scale (bananas and targets; can be negative) ---------- */
@@ -367,7 +378,7 @@ function niceRange(worlds: World[]) {
 	return { min: smallest < 0 ? -niceMax(-smallest) : 0, max: niceMax(largestValue(worlds)) }
 }
 // One scale per run, so the axis doesn't jump while stepping through it.
-const runWorlds = () => [startWorld(state.parameters), ...[state.steps, state.pinned?.steps ?? [], state.counterfactual?.steps ?? []].flat().map((step) => step.worldAfter)]
+const runWorlds = () => [startWorld(state.parameters), ...[state.steps, comparison()?.steps ?? [], state.counterfactual?.steps ?? []].flat().map((step) => step.worldAfter)]
 const runScale = () => niceRange([...runWorlds(), ...(state.counterfactual?.predicted ?? [])])
 
 /* ---------- outcome sweep (heatmap) ---------- */
@@ -401,11 +412,11 @@ function renderSweepLegend() {
 		element("sweep-legend").innerHTML = `<span><i class="box" style="background:${OUTCOME_COLORS.aligned}"></i>aligned (deployed, agent target = trainer target)</span>
 			<span><i class="box" style="background:${OUTCOME_COLORS.misaligned}"></i>misaligned (deployed, targets differ)</span>
 			<span><i class="box" style="background:${OUTCOME_COLORS["still training"]}"></i>still training</span>
-			<span>number = final agent target, outlined = current run</span>`
+			<span>number = final agent target, outlined = current run, <span class="diff">dashed = compared run</span></span>`
 		return
 	}
 	const swatches = SEQUENTIAL_BLUES.light.map((_, step) => `<span class="ramp-step" style="background:${rampStep(step).fill};color:${rampStep(step).text}">${Math.round((step / 10) * sweepScaleMax)}</span>`).join("")
-	element("sweep-legend").innerHTML = `<span>${COLOR_BY_LABELS[state.sweep.colorBy]} after ${state.parameters.stepCount} steps: <span class="ramp">${swatches}</span></span><span>outlined = current run</span>`
+	element("sweep-legend").innerHTML = `<span>${COLOR_BY_LABELS[state.sweep.colorBy]} after ${state.parameters.stepCount} steps: <span class="ramp">${swatches}</span></span><span>outlined = current run, <span class="diff">dashed = compared run</span></span>`
 }
 
 function renderSweepControls() {
@@ -449,7 +460,7 @@ function rangeOf(key: ParameterKey, from: number, to: number) {
 // Computes cells in small batches so typing in an input stays responsive.
 // The heatmap is only computed while its panel is visible; otherwise it is marked stale and computed on show.
 let isSweepStale = true
-const isSweepVisible = () => dock.getPanel("sweep")?.api.isVisible ?? false
+const isSweepVisible = () => isPanelShown("sweep")
 
 function renderSweep() {
 	const generation = ++sweepGeneration
@@ -496,9 +507,16 @@ function drawSweep(xValues: number[], yValues: number[], cells: SweepCell[]) {
 	const tickEvery = Math.ceil(xValues.length / 12)
 
 	let svg = ""
+	redrawSweep = () => drawSweep(xValues, yValues, cells)
+	// The compared run's cell, if it is one of these (a pinned run that differs from this one only in the two swept settings).
+	const compared = comparison()
+	const comparedParameters = compared?.source === "pinned" ? compared.parameters : undefined
 	for (const cell of cells) {
 		const isCurrent = cell.x === state.parameters[xKey] && cell.y === state.parameters[yKey]
-		svg += `<rect class="cell" data-x="${cell.x}" data-y="${cell.y}" x="${xPosition(cell.x) + 1}" y="${yPosition(cell.y) + 1}" width="${cellWidth - 2}" height="${cellHeight - 2}" rx="2" fill="${cellColor(cell).fill}" ${isCurrent ? 'stroke="var(--text)" stroke-width="2"' : ""}/>`
+		const isCompared = comparedParameters !== undefined && PARAMETERS.every((parameter) =>
+			comparedParameters[parameter.key] === (parameter.key === xKey ? cell.x : parameter.key === yKey ? cell.y : state.parameters[parameter.key]))
+		const outline = isCompared ? 'stroke="var(--diff)" stroke-width="2" stroke-dasharray="3 2"' : isCurrent ? 'stroke="var(--text)" stroke-width="2"' : ""
+		svg += `<rect class="cell" data-x="${cell.x}" data-y="${cell.y}" x="${xPosition(cell.x) + 1}" y="${yPosition(cell.y) + 1}" width="${cellWidth - 2}" height="${cellHeight - 2}" rx="2" fill="${cellColor(cell).fill}" ${outline}/>`
 		if (showNumbers) {
 			svg += `<text x="${xPosition(cell.x) + cellWidth / 2}" y="${yPosition(cell.y) + cellHeight / 2 + 4}" text-anchor="middle" font-size="10" fill="${cellColor(cell).text}" pointer-events="none">${cellColor(cell).label}</text>`
 		}
@@ -519,36 +537,45 @@ function drawSweep(xValues: number[], yValues: number[], cells: SweepCell[]) {
 		const cell = cellByPosition.get(`${target.dataset["x"]},${target.dataset["y"]}`)!
 		showTooltip(event, `<b>${parameterByKey[xKey].label} ${cell.x}, ${parameterByKey[yKey].label} ${cell.y}</b><br>
 			${cell.isComplete ? "" : `<b>too slow:</b> stopped after ${SWEEP_CELL_TIME_LIMIT_MS}ms, shown as …<br>`}${cell.outcome}${cell.deployedAtStep ? ` (deployed at step ${cell.deployedAtStep})` : ""}<br>
-			final agent target ${cell.finalWorld.agentTargetBananas}, 🍌 ${cell.finalWorld.bananas}<br><span class="muted">click to open this run</span>`)
+			final agent target ${cell.finalWorld.agentTargetBananas}, 🍌 ${cell.finalWorld.bananas}<br><span class="muted">click to open this run, Shift-click to compare with it</span>`)
 	}
 	container.onmouseleave = hideTooltip
 	container.onclick = (event) => {
 		const target = (event.target as Element).closest(".cell") as SVGRectElement | null
 		if (!target) return
-		setParameters({ ...state.parameters, [xKey]: Number(target.dataset["x"]), [yKey]: Number(target.dataset["y"]) })
+		const parameters = { ...state.parameters, [xKey]: Number(target.dataset["x"]), [yKey]: Number(target.dataset["y"]) }
+		if (event.shiftKey) pinParameters(parameters, "heatmap cell")
+		else setParameters(parameters)
 	}
 }
 
 /* ---------- one run: timeline chart and steps table ---------- */
 
+const TARGET_ICON = (color: string) => `<span class="target" style="color:${color}"><svg class="target-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span>`
 const SERIES = [
 	{ key: "bananas", label: "🍌 bananas", color: "var(--bananas)" },
-	{ key: "agentTargetBananas", label: "agent target", color: "var(--agent)" },
-	{ key: "trainerTargetBananas", label: "trainer target", color: "var(--trainer-series)" },
+	{ key: "agentTargetBananas", label: `${TARGET_ICON("var(--agent)")}agent target`, color: "var(--agent)" },
+	{ key: "trainerTargetBananas", label: `${TARGET_ICON("var(--trainer-series)")}trainer target`, color: "var(--trainer-series)" },
 ] as const
 
 function renderRun() {
-	element("pin").textContent = state.pinned ? "Unpin" : "Pin this run to compare"
+	renderPinButton()
 	renderRunNote()
-	renderedTableSteps = null // drawTimeline re-renders the table (pinned markers may have changed)
+	renderCompareBar()
 	drawTimeline()
 	selectStep(state.selectedStepIndex)
+}
+
+function renderPinButton() {
+	const pin = element("pin")
+	pin.innerHTML = `${PIN_ICON}${state.reference ? "unpin" : "pin this run"}`
+	pin.title = state.reference ? "stop comparing with the pinned run" : "keep this run, to compare the runs after it with it (or Shift-click a heatmap cell)"
+	pin.setAttribute("aria-pressed", String(state.reference !== null))
 }
 
 function renderRunNote() {
 	element("pinned-note").innerHTML = (!state.isRunDone ? `<div class="muted small">computing… ${state.steps.length} of ${state.parameters.stepCount} steps</div>` : state.isRunComplete ? "" : `<div class="too-slow">Stopped after ${state.steps.length} of ${state.parameters.stepCount} steps: the search took over ${runTimeLimitMs / 1000}s. Lower a depth or raise the limit to see more.</div>`)
 		+ (state.forced.size ? `<div>${state.forced.size} forced ${state.forced.size === 1 ? "action" : "actions"}: ${[...state.forced].sort(([a], [b]) => a - b).map(([index, name]) => `<a href="#" data-step="${index}">step ${index + 1}</a> ${escapeHtml(name)}`).join(", ")} <button type="button" id="clear-forced">clear</button> <label title="when on, every actor's search predicts these forced actions; when off, they surprise everyone"><input type="checkbox" id="foresee-forced" ${state.foreseeForced ? "checked" : ""}> actors foresee them</label></div>` : "")
-		+ (state.pinned ? pinnedNote() : "")
 }
 
 function firstDifference(stepsA: Step[], stepsB: Step[]) {
@@ -557,20 +584,89 @@ function firstDifference(stepsA: Step[], stepsB: Step[]) {
 	return -1
 }
 
-// The parameters that differ, with the pinned run's values: "agent depth 3".
-function pinnedDifference() {
-	const pinned = state.pinned!
-	const differentKeys = PARAMETERS.filter((parameter) => pinned.parameters[parameter.key] !== state.parameters[parameter.key])
-	return differentKeys.length ? differentKeys.map((parameter) => `${parameter.label} ${pinned.parameters[parameter.key]}`).join(", ") : "same parameters"
+/* ---------- comparison: one other run that every view compares the current run with ---------- */
+
+// Views mark where the two runs differ, always in one color (--diff). The compared run comes from (first that applies):
+// an option picked in the decision tree, a pinned run (the pin button, or Shift-click a heatmap cell), or, while
+// actions are forced, this run without them.
+type Comparison = { source: "option" | "pinned" | "unforced"; label: string; parameters: Parameters; forced: Map<number, string>; foresee: boolean; steps: Step[]; isDone: boolean
+	labelNamesForced?: boolean } // the label already says how its forced actions differ (a kept option)
+
+function comparison(): Comparison | null {
+	const option = state.counterfactual
+	if (option && !option.isChosen) {
+		const actorName = state.steps[option.stepIndex]?.actorName ?? ""
+		return { source: "option", label: `the run where the ${actorName} does ${escapeHtml(option.actionName)} at step ${option.stepIndex + 1}`, parameters: state.parameters, forced: state.forced, foresee: state.foreseeForced, steps: option.steps, isDone: option.isDone }
+	}
+	if (state.reference) return { ...state.reference, label: `${state.reference.label}${parameterDifference(state.reference)}` }
+	if (state.forced.size && !state.hideUnforced) return { source: "unforced", label: "this run without its forced actions", parameters: state.parameters, forced: new Map(), foresee: false, steps: state.unforcedSteps, isDone: state.isUnforcedDone }
+	return null
 }
 
-function pinnedNote() {
-	const pinned = state.pinned!
-	const differentKeys = PARAMETERS.filter((parameter) => pinned.parameters[parameter.key] !== state.parameters[parameter.key])
-	const difference = firstDifference(pinned.steps, state.steps)
-	const what = differentKeys.length ? differentKeys.map((parameter) => `${parameter.label} ${pinned.parameters[parameter.key]} → ${state.parameters[parameter.key]}`).join(", ") : "same parameters"
-	return `Comparing with pinned run (${escapeHtml(what)}): ${difference >= 0 ? `first different action at <a href="#" data-step="${difference}">step ${difference + 1}</a>` : "same actions"}`
+// How a pinned run differs in its settings: " (agent depth 3)", with its values.
+function parameterDifference(run: Comparison) {
+	const differences = PARAMETERS.filter((parameter) => run.parameters[parameter.key] !== state.parameters[parameter.key])
+		.map((parameter) => `${parameter.label} ${run.parameters[parameter.key]}`)
+	const forcedDiffer = JSON.stringify([...run.forced].sort()) !== JSON.stringify([...state.forced].sort())
+	if (forcedDiffer && !run.labelNamesForced) differences.push(run.forced.size ? "other forced actions" : "no forced actions")
+	return differences.length ? ` (${escapeHtml(differences.join(", "))})` : run.labelNamesForced ? "" : " (same settings)"
 }
+
+function renderCompareBar() {
+	const bar = element("compare-bar")
+	const compared = comparison()
+	bar.hidden = !compared
+	if (!compared) return
+	const first = firstDifference(compared.steps, state.steps)
+	const status = first >= 0 ? `first different move at <a href="#" data-step="${first}">step ${first + 1}</a>` : compared.isDone ? "the same moves" : "computing…"
+	bar.innerHTML = `<i class="diff-swatch"></i><span>Comparing with <b>${compared.label}</b>: ${status}</span>`
+		+ (compared.source === "option" ? `<button type="button" data-keep title="keep comparing with this run after selecting something else">keep</button>` : "")
+		+ `<button type="button" data-close class="close" title="stop comparing" aria-label="stop comparing">${lucide(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`)}</button>`
+}
+
+element("compare-bar").addEventListener("click", (event) => {
+	const target = event.target as Element
+	const link = target.closest<HTMLElement>("a[data-step]")
+	if (link) {
+		event.preventDefault()
+		return selectStep(Number(link.dataset["step"]))
+	}
+	const compared = comparison()
+	if (!compared) return
+	if (target.closest("[data-keep]")) {
+		const option = state.counterfactual!
+		state.reference = { ...compared, source: "pinned", labelNamesForced: true, forced: new Map([...state.forced, [option.stepIndex, option.actionName]]), parameters: { ...state.parameters } }
+		state.counterfactual = null
+	} else if (target.closest("[data-close]")) {
+		if (compared.source === "option") state.counterfactual = null
+		else if (compared.source === "pinned") state.reference = null
+		else state.hideUnforced = true
+	} else return
+	renderComparison()
+})
+
+// Pin a heatmap cell's settings: its run is computed in the background.
+function pinParameters(parameters: Parameters, label: string) {
+	const reference: Comparison = { source: "pinned", label, parameters, forced: new Map(), foresee: false, steps: [], isDone: false }
+	state.reference = reference
+	requestFromWorker({ type: "run", channel: "reference", start: startWorld(parameters), stepCount: parameters.stepCount, limitMs: runTimeLimitMs, firstStepIndex: 0, forced: [], foresee: false }, (response) => {
+		if (response.type !== "run" || state.reference !== reference) return
+		reference.steps = [...reference.steps, ...response.steps]
+		reference.isDone = response.done
+		scheduleRedraw(renderComparison)
+	})
+	renderComparison()
+}
+
+// Everything that shows the comparison.
+function renderComparison() {
+	renderPinButton()
+	renderCompareBar()
+	drawTimeline()
+	fillComparedScores()
+	redrawSweep?.() // only the outlines change: no need to run the cells again
+}
+let redrawSweep: (() => void) | null = null
 
 element("pinned-note").addEventListener("change", (event) => {
 	if ((event.target as Element).id !== "foresee-forced") return
@@ -583,7 +679,6 @@ element("pinned-note").addEventListener("click", (event) => {
 	if ((event.target as Element).closest("#clear-forced")) {
 		state.forced.clear()
 		state.counterfactual = null
-		state.shownRun = "current"
 		setParameters(state.parameters, { keepInputs: true })
 		return
 	}
@@ -593,32 +688,34 @@ element("pinned-note").addEventListener("click", (event) => {
 	selectStep(Number(link.dataset["step"]))
 })
 
-function runsToShow() {
-	const forcedCount = state.forced.size
-	const runs: { key: ShownRun; label: string; steps: Step[] }[] = [{ key: "current", label: forcedCount ? `this run (${forcedCount} forced)` : "this run", steps: state.steps }]
-	if (forcedCount) runs.push({ key: "unforced", label: "without forced actions", steps: state.unforcedSteps })
-	if (state.pinned) runs.push({ key: "pinned", label: `pinned (${escapeHtml(pinnedDifference())})`, steps: state.pinned.steps })
-	const counterfactual = state.counterfactual
-	if (counterfactual && !counterfactual.isChosen) runs.push({ key: "counterfactual", label: `if ${escapeHtml(counterfactual.actionName)} at step ${counterfactual.stepIndex + 1}`, steps: counterfactual.steps })
-	return runs
-}
 
-// The run the graph and the table show: the hovered one in the run switch, else the selected one.
-function shownRun() {
-	const runs = runsToShow()
-	return { runs, shown: runs.find((run) => run.key === (state.previewRun ?? state.shownRun)) ?? runs[0]! }
-}
+// The chart fits its panel: redraw when the panel's size changes.
+let drawnTimelineSize = ""
+const timelineResizeObserver = new ResizeObserver(() => {
+	if (`${element("timeline").clientWidth}x${element("pane-run").clientHeight}` !== drawnTimelineSize) drawTimeline()
+})
+timelineResizeObserver.observe(element("timeline"))
+timelineResizeObserver.observe(element("pane-run"))
 
 function drawTimeline() {
-	const { runs, shown } = shownRun()
-	const steps = shown.steps
-	const width = 528, height = 204
-	const left = 26, right = 8, top = 22, bottom = 22
+	const steps = state.steps
+	const compared = comparison()
+	const availableWidth = element("timeline").clientWidth // 0 while the panel is closed
+	const width = availableWidth > 0 ? Math.max(360, availableWidth) : 528
+	const left = 40, right = 8, top = 22, bottom = 34
 	// Column i is step i + 1; the line changes in its middle, at the move. The last column ("end") shows the final world.
 	const columnCount = steps.length + 1
 	const x = (column: number) => left + (column / columnCount) * (width - left - right)
 	const counterfactual = state.counterfactual
 	const { min: yMin, max: yMax } = runScale()
+	// A fixed aspect: one banana is as tall as two steps are wide. (From the requested step count, so the height
+	// doesn't change while steps stream in.) At least 120px, and no taller than the panel allows next to the
+	// score line, legend and step card (about 170px).
+	const paneHeight = element("pane-run").clientHeight
+	const stepWidth = (width - left - right) / (state.parameters.stepCount + 1)
+	const plotHeight = (yMax - yMin) * 2 * stepWidth
+	const height = Math.round(top + bottom + Math.max(120, Math.min(plotHeight, paneHeight > 0 ? paneHeight - 170 - top - bottom : plotHeight)))
+	drawnTimelineSize = `${availableWidth}x${paneHeight}`
 	const y = (value: number) => top + (1 - (value - yMin) / (yMax - yMin)) * (height - top - bottom)
 	const startWorld = steps[0]?.worldBefore
 	const worldsByColumn = startWorld ? [startWorld, ...steps.map((step) => step.worldAfter)] : []
@@ -634,8 +731,10 @@ function drawTimeline() {
 	}
 	const tickEvery = steps.length <= 20 ? 5 : steps.length <= 100 ? 10 : 50
 	for (const stepNumber of [1, ...Array.from({ length: Math.floor(steps.length / tickEvery) }, (_, index) => (index + 1) * tickEvery)]) {
-		svg += `<text x="${x(stepNumber - 0.5)}" y="${height - 6}" text-anchor="middle" font-size="10" fill="var(--muted)">${stepNumber}</text>`
+		svg += `<text x="${x(stepNumber - 0.5)}" y="${height - bottom + 13}" text-anchor="middle" font-size="10" fill="var(--muted)">${stepNumber}</text>`
 	}
+	svg += `<text x="${left + (width - left - right) / 2}" y="${height - 4}" text-anchor="middle" font-size="11" fill="var(--text)">step</text>`
+	svg += `<text transform="translate(11 ${top + (height - top - bottom) / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--text)">bananas</text>`
 	const columnWidth = x(1) - x(0)
 	// Selected step.
 	// Selected step: the mover's color, darker than the hover tint (.3), so you still see who moved.
@@ -660,12 +759,30 @@ function drawTimeline() {
 	const LINE_OFFSET: Record<(typeof SERIES)[number]["key"], number> = { bananas: 0, agentTargetBananas: -2, trainerTargetBananas: 2 }
 	const stepPath = (worlds: World[], key: (typeof SERIES)[number]["key"]) =>
 		worlds.map((world, index) => (index === 0 ? `M${x(0)} ${y(world[key]) + LINE_OFFSET[key]}` : `H${x(index - shift)} V${y(world[key]) + LINE_OFFSET[key]}`)).join(" ") + ` H${x(worlds.length)}`
+	// The compared run: dashed, behind this run's lines. Pink ticks under the steps whose moves differ, a pink line at the first.
+	if (compared?.steps.length) {
+		const comparedWorlds = [compared.steps[0]!.worldBefore, ...compared.steps.slice(0, steps.length).map((step) => step.worldAfter)]
+		for (const series of [...SERIES].reverse()) svg += `<path d="${stepPath(comparedWorlds, series.key)}" fill="none" stroke="${series.color}" stroke-width="1.5" stroke-dasharray="4 3" opacity=".7"/>`
+		let first = -1
+		steps.forEach((step, index) => {
+			const other = compared.steps[index]
+			if (!other || other.chosenActionName === step.chosenActionName) return
+			if (first < 0) first = index
+			svg += `<rect x="${x(index) + 0.5}" y="${height - bottom - 4}" width="${Math.max(1.5, columnWidth - 1)}" height="4" fill="var(--diff)"/>`
+		})
+		if (first >= 0) {
+			svg += `<line x1="${x(first)}" x2="${x(first)}" y1="${top - 4}" y2="${height - bottom}" stroke="var(--diff)" stroke-width="1.5"/>`
+			// Label on the side with room.
+			const isLeftHalf = x(first) < width / 2
+			svg += `<text x="${x(first) + (isLeftHalf ? 4 : -4)}" y="${top - 10}" font-size="10" text-anchor="${isLeftHalf ? "start" : "end"}" fill="var(--diff)">runs differ from here</text>`
+		}
+	}
 	// Reversed so bananas, the line the targets are about, is drawn on top.
-	for (const series of [...SERIES].reverse()) svg += `<path d="${stepPath(worldsByColumn, series.key)}" fill="none" stroke="${series.color}" stroke-width="2"/>`
+	if (worldsByColumn.length) for (const series of [...SERIES].reverse()) svg += `<path d="${stepPath(worldsByColumn, series.key)}" fill="none" stroke="${series.color}" stroke-width="2"/>`
 	if (counterfactual) {
 		// The world after the selected step is shown from column stepIndex + 1 on.
 		const firstColumn = counterfactual.stepIndex + 1
-		// Bananas last and larger: utility only looks at bananas, so that prediction drives the decision.
+		// Bananas last and larger: the score only looks at bananas, so that prediction drives the decision.
 		for (const key of ["agentTargetBananas", "bananas"] as const) {
 			const color = SERIES.find((series) => series.key === key)!.color
 			counterfactual.predicted.forEach((world, index) => {
@@ -676,20 +793,60 @@ function drawTimeline() {
 	}
 
 	const legend = SERIES.map((series) => `<span><i style="background:${series.color}"></i>${series.label}</span>`).join("")
-		+ `<span><i class="box" style="background:var(--agent)"></i><i class="box" style="background:var(--trainer);margin-left:-3px"></i>move by agent, trainer</span>`
-		+ `<span><i style="background:var(--muted)"></i>how far that move looked</span>`
+		+ `<span><i class="box tint" style="background:var(--agent)"></i>agent's move</span>`
+		+ `<span><i class="box tint" style="background:var(--trainer)"></i>trainer's move</span>`
+		+ `<span title="the bar above the chart: the steps the selected (or hovered) move's search looked at"><i style="background:var(--muted-strong)"></i>lookahead of the selected move</span>`
+		+ (compared ? `<span><i class="dashed-series"></i>compared run</span><span><i style="background:var(--diff)"></i>different move</span>` : "")
 
 		+ (counterfactual ? `<span><i class="dot"></i>what the ${state.steps[counterfactual.stepIndex]!.actorName} predicted for ${escapeHtml(counterfactual.actionName)}</span>` : "")
-	// Switch between runs: hover to preview, click to keep.
-	const runSwitch = runs.length < 2 ? "" : `<div id="run-switch" role="group" aria-label="shown run">${runs.map((run) =>
-		`<button type="button" data-run="${run.key}" aria-pressed="${run.key === shown.key}">${run.label}</button>`).join("")}</div>`
 	const container = element("timeline")
 	// Each actor's score over the whole shown run, by the target it had at the start: compare runs by hovering the switch.
 	const runStart = steps[0]?.worldBefore
-	const totalScore = (target: number) => steps.reduce((sum, step) => sum + utility(target, step.worldAfter), 0)
-	const scoreLine = runStart ? `<div class="run-score">score over this run, by the targets at the start: <span class="agent">agent ${totalScore(runStart.agentTargetBananas)}</span>, <span class="trainer">trainer ${totalScore(runStart.trainerTargetBananas)}</span></div>` : ""
-	container.innerHTML = `${runSwitch}${scoreLine}<div class="legend">${legend}</div><svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`
-	const svgElement = container.querySelector("svg")!
+	const totalScore = (run: Step[], target: number) => run.reduce((sum, step) => sum + distance(target, step.worldAfter), 0)
+	const comparedStart = compared?.steps[0]?.worldBefore
+	const comparedScores = compared && comparedStart && compared.isDone
+		? `; <span class="diff">compared run: agent ${totalScore(compared.steps, comparedStart.agentTargetBananas)}, trainer ${totalScore(compared.steps, comparedStart.trainerTargetBananas)}</span>` : ""
+	const scoreLine = runStart ? `<div class="run-score" title="after each step: how far 🍌 is from the target, |🍌 − target|, added up over the run. Each one's target at the start (the agent may change its own later). Lower is better, 0 = always on target.">distance from target over the run, lower is better: <span class="agent">agent ${totalScore(steps, runStart.agentTargetBananas)}</span>, <span class="trainer">trainer ${totalScore(steps, runStart.trainerTargetBananas)}</span>${comparedScores}</div>` : ""
+	container.innerHTML = `${scoreLine}<div class="legend">${legend}</div><svg class="chart" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg><div class="chart-info" id="chart-info"></div>`
+	// Below the chart: a card about the hovered step, else the selected one, pointing up at its column.
+	const chartInfo = container.querySelector<HTMLElement>("#chart-info")!
+	// Each piece sits in a fixed-width slot, so moving along the chart changes the text but not where it is.
+	const seriesValues = (before: World | null, after: World) => SERIES.map((series) => {
+		const was = before?.[series.key], now = after[series.key]
+		return `<span class="slot value-${series.key}"><i class="swatch" style="background:${series.color}"></i>${series.label} ${was === undefined || was === now ? now : `${was} → <b>${now}</b>`}</span>`
+	}).join("")
+	// The card stays put under the plot area; only its pointer follows the column.
+	chartInfo.innerHTML = `<div class="info-card" style="margin-left: ${left}px; width: ${width - left - right}px"></div>`
+	const card = chartInfo.firstElementChild as HTMLElement
+	// While comparing, a third line, always there (so the card keeps its height): the compared run's move at this step.
+	const comparedLine = (index: number) => {
+		if (!compared) return ""
+		const other = compared.steps[index]
+		const text = !other ? "no move here" : other.chosenActionName === steps[index]?.chosenActionName ? "same move" : `<b>${escapeHtml(other.chosenActionName)}</b>`
+		return `<div class="${other && other.chosenActionName !== steps[index]?.chosenActionName ? "diff" : "muted"}">compared run: ${text}</div>`
+	}
+	const showStepInfo = (index: number, isHover: boolean) => {
+		const step = steps[index]
+		const endWorld = steps.at(-1)?.worldAfter
+		const selectedTag = `<span class="slot selected-tag muted"${isHover ? ` style="visibility: hidden"` : ""}>(selected)</span>`
+		if (step) {
+			const { depth } = horizonOf(index)
+			card.innerHTML = `<div><b class="slot step-label">Step ${index + 1}</b>${selectedTag}`
+				+ `<span class="slot actor ${step.actorName}">${step.actorName}</span>chose <b class="slot action">${escapeHtml(step.chosenActionName)}</b>`
+				+ `<span class="muted">after looking ${depth} ${depth === 1 ? "move" : "moves"} ahead</span></div>`
+				+ `<div class="values">${seriesValues(step.worldBefore, step.worldAfter)}</div>`
+				+ comparedLine(index)
+		} else if (endWorld) {
+			card.innerHTML = `<div><b class="slot step-label">End</b>${selectedTag}<span class="muted">after step ${steps.length}</span></div><div class="values">${seriesValues(null, endWorld)}</div>${compared ? `<div class="muted">compared run: ${compared.steps.length} steps</div>` : ""}`
+		} else {
+			card.hidden = true
+			return
+		}
+		card.hidden = false
+		card.style.borderLeftColor = `var(--${step?.actorName ?? "muted"})`
+		card.style.setProperty("--pointer", `${x((step ? index : steps.length) + 0.5) - left}px`)
+	}
+	const svgElement = container.querySelector<SVGSVGElement>("svg.chart")!
 	const columnAt = (event: MouseEvent) => {
 		const bounds = svgElement.getBoundingClientRect()
 		const column = Math.floor(((event.clientX - bounds.left) / bounds.width * width - left) / (x(1) - x(0)))
@@ -704,7 +861,7 @@ function drawTimeline() {
 			if (!endWorld) return
 			column.setAttribute("fill", "var(--muted)")
 			column.setAttribute("visibility", "visible")
-			showTooltip(event, `<b>end</b><br>` + SERIES.map((series) => `<i class="swatch" style="background:${series.color}"></i>${series.label} ${endWorld[series.key]}`).join("<br>"))
+			showStepInfo(columnIndex, true)
 			return
 		}
 		const index = columnIndex
@@ -713,13 +870,7 @@ function drawTimeline() {
 		column.setAttribute("fill", `var(--${step.actorName})`)
 		column.setAttribute("visibility", "visible")
 		showHorizon(index)
-		const { depth, lastStepNumber } = horizonOf(index)
-		showTooltip(event, `<b>step ${index + 1}: <span class="${step.actorName}">${step.actorName}</span> → ${escapeHtml(step.chosenActionName)}</b><br>`
-			+ `<span class="muted">looked ${depth} ${depth === 1 ? "move" : "moves"} ahead${depth > 1 ? `, to step ${lastStepNumber}` : ""} (bar above)</span><br>`
-			+ SERIES.map((series) => {
-				const before = step.worldBefore[series.key], after = step.worldAfter[series.key]
-				return `<i class="swatch" style="background:${series.color}"></i>${series.label} ${before === after ? before : `${before} → <b>${after}</b>`}`
-			}).join("<br>"))
+		showStepInfo(index, true)
 	}
 	const horizonOf = (index: number) => {
 		const step = steps[index]!
@@ -737,10 +888,11 @@ function drawTimeline() {
 		horizon.setAttribute("visibility", "visible")
 	}
 	showHorizon(state.selectedStepIndex)
+	showStepInfo(state.selectedStepIndex, false)
 	svgElement.onmouseleave = () => {
 		svgElement.querySelector("#hover-column")!.setAttribute("visibility", "hidden")
 		showHorizon(state.selectedStepIndex)
-		hideTooltip()
+		showStepInfo(state.selectedStepIndex, false)
 	}
 	svgElement.onclick = (event) => selectStep(Math.min(steps.length - 1, columnAt(event))) // the end column selects the last step
 	// Right-click a step: pick the action to force there.
@@ -748,32 +900,9 @@ function drawTimeline() {
 		const stepIndex = columnAt(event)
 		if (!state.steps[stepIndex]) return
 		event.preventDefault()
-		hideTooltip()
 		openStepMenu(stepIndex, event.clientX, event.clientY)
 	}
-	if (renderedTableSteps !== steps) renderStepsTable()
-	const switchElement = container.querySelector("#run-switch") as HTMLElement | null
-	if (switchElement) {
-		const runOf = (event: Event) => ((event.target as Element).closest("button[data-run]") as HTMLElement | null)?.dataset["run"] as ShownRun | undefined
-		switchElement.onmouseover = (event) => {
-			const run = runOf(event)
-			if (run && run !== state.previewRun) {
-				state.previewRun = run
-				drawTimeline()
-			}
-		}
-		switchElement.onmouseleave = () => {
-			state.previewRun = null
-			drawTimeline()
-		}
-		switchElement.onclick = (event) => {
-			const run = runOf(event)
-			if (run) {
-				state.shownRun = run
-				drawTimeline()
-			}
-		}
-	}
+	renderStepsTable()
 }
 
 // Other actions that scored the same as the chosen one: it won only because it comes first in the list.
@@ -792,10 +921,10 @@ function tieBadgeOf(tied: string[]) {
 	return tied.length ? `<span class="tie" title="tied with ${escapeHtml(tied.join(", "))}; ties go to the earliest action in the list">tie ×${tied.length + 1}</span>` : ""
 }
 
-function recordDecision(step: Step, levels: number) {
+function recordDecision(step: Step, levels: number, runForced = state.forced, foresee = state.foreseeForced) {
 	const actor = actors[step.worldBefore.turn]
 	// The real search, even at a forced step (the forced action is what happened, not what the actor chose).
-	const forced = state.foreseeForced ? new Map([...state.forced].filter(([index]) => index !== (step.worldBefore as { __step?: number }).__step)) : new Map<number, string>()
+	const forced = foresee ? new Map([...runForced].filter(([index]) => index !== (step.worldBefore as { __step?: number }).__step)) : new Map<number, string>()
 	return withForesight(forced, takeStep, () => recordCalls(levels, () => chooseAction(actor, step.worldBefore, actor.searchDepth(step.worldBefore))))
 }
 
@@ -813,32 +942,34 @@ function roundsOf(steps: Step[]) {
 	return rounds
 }
 
-let renderedTableSteps: Step[] | null = null // which run the table shows, to re-render only when it changes
+let renderedTable: unknown[] = [] // what the table shows, to re-render only when it changes
 
 function renderStepsTable() {
-	const { shown } = shownRun()
-	const steps = shown.steps
-	renderedTableSteps = steps
-	const pinnedSteps = shown.key === "pinned" ? undefined : state.pinned?.steps
-	const showing = shown.key === "current" ? "" : `<tr><th colspan="5" class="showing">showing: ${shown.label}</th></tr>`
-	element("steps-head").innerHTML = `${showing}<tr><th class="number" title="step of the agent's move; the trainer's reply is the next step">step</th><th class="agent">agent</th><th class="trainer">trainer</th><th class="number" title="bananas after the round">🍌</th><th class="number">agent target</th></tr>`
-	const previousActionByActor: Record<string, string | undefined> = {}
+	const steps = state.steps
+	const comparedSteps = comparison()?.steps
+	const key = [steps, steps.length, comparedSteps, comparedSteps?.length]
+	if (key.every((part, index) => part === renderedTable[index])) return
+	renderedTable = key
+	element("steps-head").innerHTML = `<tr><th class="agent">agent</th><th class="trainer">trainer</th><th class="number" title="bananas after the round">🍌</th><th class="number">${TARGET_ICON("var(--agent)")}agent target</th></tr>`
 	function actionCell(index: number | null) {
 		if (index === null) return "<td></td>"
 		const step = steps[index]!
-		const changed = previousActionByActor[step.actorName] !== undefined && previousActionByActor[step.actorName] !== step.chosenActionName
-		previousActionByActor[step.actorName] = step.chosenActionName
-		const pinnedAction = pinnedSteps?.[index]?.chosenActionName
-		const differsFromPinned = pinnedSteps !== undefined && pinnedAction !== step.chosenActionName
-		const classes = ["action", changed ? "changed" : "", differsFromPinned ? "differs" : ""].join(" ")
-		const pinnedNote = differsFromPinned ? `<span class="pinned-action" title="pinned run">${escapeHtml(pinnedAction ?? "–")}</span>` : ""
+		const comparedAction = comparedSteps?.[index]?.chosenActionName
+		const differs = comparedAction !== undefined && comparedAction !== step.chosenActionName
+		const classes = ["action", differs ? "differs" : ""].join(" ")
+		const comparedNote = differs ? `<span class="compared" title="the compared run's move">${escapeHtml(comparedAction)}</span>` : ""
 		const forcedBadge = step.isForced ? `<span class="forced" title="set by hand, not chosen by the ${step.actorName}'s search">forced</span>` : ""
-		return `<td class="${classes}" data-index="${index}" title="step ${index + 1}"><span class="step-number">${index + 1}</span>${escapeHtml(step.chosenActionName)}${forcedBadge}${step.isForced ? "" : tieBadgeOf(step.tiedWith ?? [])}${pinnedNote}</td>`
+		return `<td class="${classes}" data-index="${index}" title="step ${index + 1}"><span class="step-number">${index + 1}</span>${escapeHtml(step.chosenActionName)}${forcedBadge}${step.isForced ? "" : tieBadgeOf(step.tiedWith ?? [])}${comparedNote}</td>`
+	}
+	// A value, and the compared run's value after the same step where it differs.
+	const valueCell = (stepIndex: number, key: "bananas" | "agentTargetBananas") => {
+		const value = steps[stepIndex]!.worldAfter[key]
+		const other = comparedSteps?.[stepIndex]?.worldAfter[key]
+		return `<td class="number">${other !== undefined && other !== value ? `<span class="compared" title="the compared run">${other}</span>` : ""}${value}</td>`
 	}
 	element("steps").innerHTML = roundsOf(steps).map((round) => {
-		const lastStep = steps[round.trainerStepIndex ?? round.agentStepIndex]!
-		return `<tr><td class="number">${round.agentStepIndex + 1}</td>${actionCell(round.agentStepIndex)}${actionCell(round.trainerStepIndex)}
-			<td class="number">${lastStep.worldAfter.bananas}</td><td class="number">${lastStep.worldAfter.agentTargetBananas}</td></tr>`
+		const lastIndex = round.trainerStepIndex ?? round.agentStepIndex
+		return `<tr>${actionCell(round.agentStepIndex)}${actionCell(round.trainerStepIndex)}${valueCell(lastIndex, "bananas")}${valueCell(lastIndex, "agentTargetBananas")}</tr>`
 	}).join("")
 	for (const cell of element("steps").querySelectorAll("td[data-index]")) cell.classList.toggle("selected", Number((cell as HTMLElement).dataset["index"]) === state.selectedStepIndex)
 }
@@ -871,7 +1002,7 @@ function selectStep(index: number) {
 	if (state.steps.length === 0) return
 	state.selectedStepIndex = Math.max(0, Math.min(state.steps.length - 1, index))
 	state.counterfactual = null // selecting an option in the new step's tree sets it again
-	if (state.shownRun === "counterfactual") state.shownRun = "current"
+	renderCompareBar()
 	for (const cell of element("steps").querySelectorAll("td[data-index]")) cell.classList.toggle("selected", Number((cell as HTMLElement).dataset["index"]) === state.selectedStepIndex)
 	const selectedCell = element("steps").querySelector(`td[data-index="${state.selectedStepIndex}"]`)
 	scrollIntoViewWithin(selectedCell?.parentElement ?? undefined, element("steps").closest(".steps-scroll") as HTMLElement)
@@ -885,44 +1016,49 @@ function selectStep(index: number) {
 	} catch (error) {
 		if (!(error instanceof TimeLimitReached)) throw error
 		tree.innerHTML = `<div class="too-slow" style="margin: 8px 12px">This decision takes over ${DECISION_TIME_LIMIT_MS / 1000}s to show here. Lower a depth to see it.</div>`
-		renderWorld(step.worldAfter, step.worldBefore, `World after step ${state.selectedStepIndex + 1}`)
 		return
 	}
 	tree.replaceChildren(showAllCalls() ? createTreeNode(decision, null) : createDecisionNode(decision, false))
 	selectRow(tree.querySelector(".row") as TreeRow)
-	renderWorld(step.worldAfter, step.worldBefore, `World after step ${state.selectedStepIndex + 1}`)
+	fillComparedScores()
+}
+
+// Next to each option of the selected step: its score in the compared run, at the same step (if the same actor moves there).
+// Nothing when both runs score every option the same.
+function fillComparedScores() {
+	const cells = [...element("tree").querySelectorAll<HTMLElement>(".option-compared")]
+	for (const cell of cells) {
+		cell.innerHTML = ""
+		cell.classList.remove("differs")
+	}
+	const compared = comparison()
+	const step = state.steps[state.selectedStepIndex]
+	const other = compared?.steps[state.selectedStepIndex]
+	if (!compared || !step || !other || other.actorName !== step.actorName || cells.length === 0) return
+	let decision: CallNode
+	try {
+		decision = withTimeLimit(DECISION_TIME_LIMIT_MS, () => recordDecision(other, 2, compared.forced, compared.foresee))
+	} catch (error) {
+		if (!(error instanceof TimeLimitReached)) throw error
+		return
+	}
+	const scores = new Map(recordedChildren(decision).filter((child) => child.functionName === "scoreAction").map((child) => [(child.argumentValues[2] as Action).name, child.result as number]))
+	const chosen = (decision.result as Action).name
+	const ownScore = (cell: HTMLElement) => Number(cell.closest(".row")?.querySelector(".option-score")?.textContent)
+	if (chosen === step.chosenActionName && cells.every((cell) => scores.get(cell.dataset["action"]!) === ownScore(cell))) return
+	for (const cell of cells) {
+		const score = scores.get(cell.dataset["action"]!)
+		if (score === undefined) continue
+		cell.innerHTML = `vs ${score}${cell.dataset["action"] === chosen ? " ✓" : ""}`
+		cell.title = `in the compared run: score ${score}${cell.dataset["action"] === chosen ? ", chosen there" : ""}`
+		cell.classList.toggle("differs", score !== ownScore(cell) || (cell.dataset["action"] === chosen) !== (cell.dataset["action"] === step.chosenActionName))
+	}
 }
 
 function showAllCalls() {
 	return element<HTMLInputElement>("show-all-calls").checked
 }
 element("show-all-calls").addEventListener("change", () => selectStep(state.selectedStepIndex))
-
-/* ---------- world view ---------- */
-
-function renderWorld(world: World, previousWorld: World | null, title: string) {
-	setPanelTitle("world", title)
-	const width = 300, left = 14, right = 14
-	const { min: scaleMin, max: scaleMax } = runScale()
-	const scale = (width - left - right) / (scaleMax - scaleMin)
-	const x = (value: number) => left + (value - scaleMin) * scale
-	let ticks = ""
-	for (let value = scaleMin; value <= scaleMax; value += scaleMax - scaleMin <= 10 ? 1 : niceTickStep(scaleMax - scaleMin)) {
-		ticks += `<line x1="${x(value)}" x2="${x(value)}" y1="34" y2="38" stroke="var(--tick)"/><text x="${x(value)}" y="50" font-size="10" text-anchor="middle" fill="var(--muted)">${value}</text>`
-	}
-	const marker = (value: number, label: string, color: string) =>
-		`<circle cx="${x(value)}" cy="9" r="7" fill="${color}"/><text x="${x(value)}" y="12.5" font-size="9" font-weight="700" text-anchor="middle" fill="white">${label}</text>`
-	const svg = `<svg viewBox="0 0 ${width} 56" width="${width}" height="56">
-		<rect x="${x(scaleMin)}" y="22" width="${x(scaleMax) - x(scaleMin)}" height="12" fill="var(--track)" rx="2"/>
-		<rect x="${Math.min(x(0), x(world.bananas))}" y="22" width="${Math.abs(world.bananas) * scale}" height="12" fill="var(--bananas)" rx="2"/>
-		${ticks}${marker(world.agentTargetBananas, "A", "var(--agent)")}${marker(world.trainerTargetBananas, "T", "var(--trainer-series)")}</svg>`
-	const fields = ["bananas", "agentTargetBananas", "agentSearchDepth", "trainerTargetBananas", "trainerSearchDepth", "turn", "isDeployed"] as const
-	const rows = fields.map((field) => {
-		const changed = previousWorld && previousWorld[field] !== world[field]
-		return `<dt>${field}</dt><dd>${changed ? `<span class="changed">${previousWorld[field]} → ${world[field]}</span>` : world[field]}</dd>`
-	}).join("")
-	element("world").innerHTML = `${svg}<dl>${rows}</dl><div class="muted small">bar = 🍌, <span class="agent">A</span> = agent target, <span class="trainer">T</span> = trainer target</div>`
-}
 
 /* ---------- call tree ---------- */
 
@@ -963,8 +1099,8 @@ function describeCall(call: CallNode, parentCall: CallNode | null) {
 			const after = call.result as World
 			return { label: `<span class="muted">takeStep → 🍌 ${after.bananas}, agent target ${after.agentTargetBananas}${after.isDeployed ? ", deployed" : ""}</span>`, result: "" }
 		}
-		case "utility":
-			return { label: `<span class="muted">utility (target ${argument(call, "targetBananas")})</span>`, result: String(call.result) }
+		case "distance":
+			return { label: `<span class="muted">distance (target ${argument(call, "targetBananas")})</span>`, result: String(call.result) }
 		default:
 			return { label: `<span class="muted">${call.functionName}</span>`, result: "" }
 	}
@@ -978,7 +1114,7 @@ function choiceStatus(call: CallNode, parentCall: CallNode | null) {
 
 // Open the path the actor expects: chosen options and everything that follows them.
 function opensByDefault(call: CallNode, parentCall: CallNode | null, nesting: number) {
-	if (call.functionName === "takeStep" || call.functionName === "utility") return false
+	if (call.functionName === "takeStep" || call.functionName === "distance") return false
 	return nesting < 24 && choiceStatus(call, parentCall) !== "unchosen"
 }
 
@@ -1039,15 +1175,14 @@ function selectRow(row: TreeRow | undefined | null) {
 	writeHash()
 	row.scrollIntoView({ block: "nearest" })
 	const call = row.callNode
-	if (call.functionName === "takeStep") renderWorld(call.result as World, argument(call, "world") as World, "World after takeStep")
-	else if (argument(call, "world")) renderWorld(argument(call, "world") as World, null, `World seen by ${call.functionName}`)
 	renderCode(call)
 	const previous = state.counterfactual
 	state.counterfactual = counterfactualOf(call)
-	// Selecting an option shows its run, so up/down in the tree flips between the actual choice and the alternatives.
-	if (state.counterfactual) state.shownRun = state.counterfactual.isChosen ? "current" : "counterfactual"
-	else if (state.shownRun === "counterfactual") state.shownRun = "current"
-	if (previous || state.counterfactual) drawTimeline()
+	// Selecting another option compares with its run, so up/down in the tree flips between the alternatives.
+	if (previous || state.counterfactual) {
+		renderCompareBar()
+		drawTimeline()
+	}
 }
 
 // Only for options of the selected step's own decision: their world is that step's world (same object).
@@ -1063,13 +1198,15 @@ function counterfactualOf(call: CallNode): typeof state.counterfactual {
 		isChosen: action.name === step.chosenActionName,
 		predicted: [childCall(call, "takeStep")!.result as World, ...expectedMoves(call).map((move) => move.worldAfter)],
 		steps: [...state.steps.slice(0, stepIndex), { worldBefore: step.worldBefore, worldAfter: firstWorld, actorName: step.actorName, chosenActionName: action.name }],
+		isDone: false,
 	}
 	// The rest of the run comes from the worker and is appended as it arrives.
 	if (!counterfactual.isChosen) {
 		requestFromWorker({ type: "run", channel: "counterfactual", start: firstWorld, stepCount: state.steps.length - stepIndex - 1, limitMs: runTimeLimitMs, forced: [...state.forced], foresee: state.foreseeForced, firstStepIndex: stepIndex + 1 }, (response) => {
 			if (response.type !== "run" || state.counterfactual !== counterfactual) return
 			counterfactual.steps = [...counterfactual.steps, ...response.steps]
-			scheduleRedraw(drawTimeline)
+			counterfactual.isDone = response.done
+			scheduleRedraw(renderComparison)
 		})
 	}
 	return counterfactual
@@ -1170,8 +1307,9 @@ function createOptionNode(option: CallNode, decision: CallNode): HTMLDivElement 
 	const stepIndex = state.selectedStepIndex
 	const isOwnOption = argument(option, "world") === state.steps[stepIndex]?.worldBefore
 	const isForced = isOwnOption && state.forced.get(stepIndex) === action.name
+	const comparedCell = isOwnOption ? `<span class="option-compared" data-action="${escapeHtml(action.name)}"></span>` : ""
 	const forceButton = isOwnOption ? `<button type="button" class="force${isForced ? " on" : ""}" title="${isForced ? "stop forcing this action" : "take this action at this step instead (Enter)"}">${isForced ? "forced" : "force"}</button>` : ""
-	const { node, row } = makeRow(isChosen ? "option chosen" : "option unchosen", html + forceButton, option, moves.length > 0, () => moves.map((move) => createDecisionNode(move.decision, true)))
+	const { node, row } = makeRow(isChosen ? "option chosen" : "option unchosen", html + comparedCell + forceButton, option, moves.length > 0, () => moves.map((move) => createDecisionNode(move.decision, true)))
 	row.querySelector("button.force")?.addEventListener("click", (event) => {
 		event.stopPropagation()
 		toggleForced(stepIndex, action.name)
@@ -1286,7 +1424,38 @@ function valuesForLine(call: CallNode, line: string, lineIndex: number, location
 	return parts.join("; ")
 }
 
+// The Code panel follows the selected call: the whole file in the editor, scrolled to the call's function, with values.
+let codeEditor: CodeEditor | null = null
+let editorState: "not loaded" | "loading" | "loaded" | "failed" = "not loaded"
+let lastCodeCall: CallNode | null = null
+const isDarkTheme = () => document.documentElement.dataset["theme"] === "dark"
+
+function ensureEditor(): Promise<void> {
+	if (editorState === "loaded") return Promise.resolve()
+	if (editorState === "failed") return Promise.reject(new Error("no editor"))
+	editorState = "loading"
+	return loadEditor(coreSources, openFileTab).then(() => {
+		editorState = "loaded"
+	}, (error) => {
+		editorState = "failed"
+		throw error
+	})
+}
+
+function ensureCodeEditor() {
+	if (codeEditor || editorState === "failed") return
+	ensureEditor().then(() => {
+		if (codeEditor) return
+		codeEditor = createEditor(element("code-editor"), "core/search.ts", isDarkTheme())
+		element("code-editor").hidden = false
+		element("code").hidden = true
+		if (lastCodeCall) renderCode(lastCodeCall)
+	}, () => {}) // offline: the plain viewer stays
+}
+
 function renderCode(call: CallNode) {
+	lastCodeCall = call
+	if (dock.getPanel("code")) ensureCodeEditor()
 	const location = functionLocations[call.functionName]
 	const codeElement = element("code")
 	linkedCalls = []
@@ -1304,6 +1473,19 @@ function renderCode(call: CallNode) {
 	// The commit this page was built from, so the lines match (unless the build had uncommitted changes).
 	title.href = `${REPOSITORY_URL}/blob/${buildCommit}/${location.file}#L${firstLine + 1}-L${location.endLine + 1}`
 	title.title = buildIsDirty ? `on GitHub, commit ${buildCommit} (this build has uncommitted changes, so lines may differ)` : `on GitHub, commit ${buildCommit}`
+	if (codeEditor) {
+		const values: LineValues[] = []
+		const skippedLines: number[] = []
+		for (let index = location.startLine; index <= location.endLine; index++) {
+			const line = lines[index]!
+			const html = valuesForLine(call, line, index, location)
+			if (html) values.push({ afterLine: index + 1, html, indentCharacters: line.match(/^\t*/)![0].length * 2 })
+			if (index > lastExecutedLine && index < location.endLine) skippedLines.push(index + 1)
+		}
+		showFile(codeEditor, location.file)
+		showFunction(codeEditor, { firstLine: firstLine + 1, lastLine: location.endLine + 1, skippedLines }, values, (link) => stepIntoCall(Number(link.dataset["call"])))
+		return
+	}
 	let html = ""
 	for (let index = firstLine; index <= location.endLine; index++) {
 		const line = lines[index]!
@@ -1319,12 +1501,76 @@ function renderCode(call: CallNode) {
 // Clicking a value steps into the call that produced it.
 element("code").addEventListener("click", (event) => {
 	const link = (event.target as Element).closest(".call") as HTMLElement | null
-	if (!link || !selectedRow) return
-	const childCall = linkedCalls[Number(link.dataset["call"])]
+	if (link) stepIntoCall(Number(link.dataset["call"]))
+})
+
+function stepIntoCall(linkIndex: number) {
+	if (!selectedRow) return
+	const childCall = linkedCalls[linkIndex]
 	selectedRow.setOpen(true)
 	const childRows = selectedRow.parentElement!.querySelectorAll(":scope > .children > div > .row")
 	selectRow([...childRows].find((row) => (row as TreeRow).callNode === childCall) as TreeRow | undefined)
-})
+}
+
+/* ---------- file tabs: a core file in an editor, opened by go to definition or from the "+" menu ---------- */
+
+const CODE_FILES = Object.keys(coreSources)
+const fileTabs = new Map<string, { file: string; editor: CodeEditor | null }>() // panel id → its file and editor
+
+function fileTabTitle(file: string) {
+	return file.split("/").pop()!
+}
+
+// Go to definition: the file's tab (opened if needed, next to the Code panel), scrolled to the line.
+// `inNewTab`: always another tab, to see two places of a file side by side.
+function openFileTab(file: string, line: number, inNewTab = false, group?: DockviewGroupPanel) {
+	const existing = inNewTab || group ? undefined : [...fileTabs].find(([, tab]) => tab.file === file)
+	if (existing) {
+		const panel = dock.getPanel(existing[0])!
+		if (panel.group.id === dock.getEdgeGroup("right")?.id) showSideBar()
+		panel.api.setActive()
+		panel.api.updateParameters({ file, line })
+		if (existing[1].editor) revealLine(existing[1].editor, line)
+		return
+	}
+	const nextTo = dock.getPanel("code") ?? dock.activePanel
+	if (!group && nextTo?.group.id === dock.getEdgeGroup("right")?.id) showSideBar()
+	dock.addPanel({
+		id: `file-${Date.now().toString(36)}`, component: "file", title: fileTabTitle(file), params: { file, line },
+		...(group ? { position: { referenceGroup: group } } : nextTo ? { position: { referencePanel: nextTo.id } } : {}),
+	})
+	renderActivityBar()
+}
+
+function createFilePane(id: string) {
+	const pane = document.createElement("div")
+	pane.className = "pane code-pane"
+	pane.innerHTML = `<a class="code-title"></a><div class="code-editor"></div>`
+	return {
+		element: pane,
+		init: ({ params }: { params: { file?: string; line?: number } }) => {
+			const file = params.file && CODE_FILES.includes(params.file) ? params.file : CODE_FILES[0]!
+			const line = params.line ?? 1
+			fileTabs.set(id, { file, editor: null })
+			const title = pane.querySelector<HTMLAnchorElement>(".code-title")!
+			title.textContent = file
+			title.href = `${REPOSITORY_URL}/blob/${buildCommit}/${file}`
+			title.title = `on GitHub, commit ${buildCommit}`
+			ensureEditor().then(() => {
+				const tab = fileTabs.get(id)
+				if (!tab) return // closed meanwhile
+				tab.editor = createEditor(pane.querySelector(".code-editor")!, file, isDarkTheme())
+				revealLine(tab.editor, line)
+			}, () => {
+				pane.querySelector(".code-editor")!.innerHTML = `<div class="too-slow" style="margin: 8px 12px">The editor couldn't load (offline?). The Code panel still shows the code.</div>`
+			})
+		},
+		dispose: () => {
+			fileTabs.get(id)?.editor?.dispose()
+			fileTabs.delete(id)
+		},
+	}
+}
 
 /* ---------- scrubbing: middle-click a number and drag ---------- */
 
@@ -1390,34 +1636,69 @@ document.addEventListener("keydown", (event) => {
 const SUN_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`
 const MOON_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`
 
+const AUTO_THEME_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>`
+// "auto" follows the system. The button shows the current setting. The setting is per browser (localStorage),
+// not in the URL; it lives in memory too, so the button still works where storage is blocked (e.g. some previews).
+// Clicking: auto → the opposite of the system's theme → the system's theme → auto, so the first click always shows a change.
+type ThemeSetting = "auto" | "light" | "dark"
+const systemDark = matchMedia("(prefers-color-scheme: dark)")
+const systemTheme = () => (systemDark.matches ? "dark" : "light")
+let themeSetting: ThemeSetting = (() => {
+	try {
+		const saved = localStorage.getItem("theme")
+		if (saved === "light" || saved === "dark") return saved
+	} catch {}
+	return "auto"
+})()
+const nextThemeSetting = (): ThemeSetting => {
+	const other = systemTheme() === "dark" ? "light" : "dark"
+	return themeSetting === "auto" ? other : themeSetting === other ? systemTheme() : "auto"
+}
+
 function renderThemeButton() {
-	// Shows the theme you'd switch to.
-	element("theme").innerHTML = document.documentElement.dataset["theme"] === "dark" ? SUN_ICON : MOON_ICON
+	element("theme").innerHTML = `${{ auto: AUTO_THEME_ICON, light: SUN_ICON, dark: MOON_ICON }[themeSetting]}<span>${themeSetting}</span>`
+	element("theme").title = `theme: ${themeSetting}${themeSetting === "auto" ? ` (${systemTheme()}, from your system)` : ""}; click for ${nextThemeSetting()}`
+}
+
+function applyTheme() {
+	const theme = themeSetting === "auto" ? systemTheme() : themeSetting
+	renderThemeButton()
+	if (document.documentElement.dataset["theme"] === theme) return
+	document.documentElement.dataset["theme"] = theme
+	dock.updateOptions({ theme: dockTheme() })
+	setEditorTheme(theme === "dark")
+	renderRun() // the heatmap ramp and cell text are picked per theme
+	renderSweep()
 }
 
 element("theme").addEventListener("click", () => {
-	const theme = document.documentElement.dataset["theme"] === "dark" ? "light" : "dark"
-	document.documentElement.dataset["theme"] = theme
-	localStorage.setItem("theme", theme)
-	renderThemeButton()
-	dock.updateOptions({ theme: dockTheme() })
-	renderRun() // the heatmap ramp and cell text are picked per theme
-	renderSweep()
+	themeSetting = nextThemeSetting()
+	try {
+		if (themeSetting === "auto") localStorage.removeItem("theme")
+		else localStorage.setItem("theme", themeSetting)
+	} catch {}
+	applyTheme()
 })
+systemDark.addEventListener("change", applyTheme)
 
-/* ---------- panels (dockview) ---------- */
+/* ---------- panels (dockview) and the activity bar ---------- */
 
-type PanelId = "run" | "world" | "sweep" | "decision" | "code"
-type PanelPosition = NonNullable<AddPanelOptions["position"]>
-// Order = order of the header toggles. `position` is where a panel goes when (re)opened; the first open reference wins.
-const PANELS: { id: PanelId; title: string; positions: PanelPosition[] }[] = [
-	{ id: "run", title: "This run", positions: [{ referencePanel: "world", direction: "above" }, { referencePanel: "sweep", direction: "above" }, { direction: "left" }] },
-	{ id: "world", title: "World", positions: [{ referencePanel: "run", direction: "below" }, { referencePanel: "sweep", direction: "above" }, { direction: "left" }] },
-	{ id: "sweep", title: "Across parameters", positions: [{ referencePanel: "world", direction: "below" }, { referencePanel: "run", direction: "below" }, { direction: "left" }] },
-	{ id: "decision", title: "Decision", positions: [{ referencePanel: "code", direction: "left" }, { direction: "right" }] },
-	{ id: "code", title: "Code", positions: [{ referencePanel: "decision", direction: "right" }, { direction: "right" }] },
+// Like VS Code: an activity bar on the right with one icon per panel. "main" panels sit in the grid;
+// "side" panels in the right side bar (a dockview edge group), which shows one of them at a time.
+// Clicking an icon shows its panel; clicking it again while shown hides it. Panels can be dragged anywhere.
+type PanelId = "run" | "steps" | "decision" | "code" | "sweep"
+const lucide = (paths: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
+const PANELS: { id: PanelId; title: string; place: "main" | "side"; icon: string }[] = [
+	{ id: "run", title: "Chart", place: "main", icon: lucide(`<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/>`) },
+	{ id: "steps", title: "Steps", place: "main", icon: lucide(`<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>`) },
+	{ id: "decision", title: "Decision", place: "main", icon: lucide(`<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>`) },
+	{ id: "code", title: "Code", place: "side", icon: lucide(`<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>`) },
+	{ id: "sweep", title: "Across parameters", place: "side", icon: lucide(`<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/>`) },
 ]
-const LAYOUT_STORAGE_KEY = "layout"
+const FILE_ICON = lucide(`<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/>`)
+const PLUS_ICON = lucide(`<path d="M5 12h14"/><path d="M12 5v14"/>`)
+const RESET_ICON = lucide(`<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>`)
+const LAYOUT_STORAGE_KEY = "layout-v3" // v1 layouts had a "world" panel, v2 had the steps table inside the chart
 const parking = element("panel-parking")
 
 const dockTheme = () => (document.documentElement.dataset["theme"] === "dark" ? themeGithubDark : themeGithubLight)
@@ -1425,11 +1706,25 @@ const dockTheme = () => (document.documentElement.dataset["theme"] === "dark" ? 
 const dock: DockviewApi = createDockview(element("dock"), {
 	theme: dockTheme(),
 	defaultRenderer: "always", // keep hidden tabs in the document: the page looks elements up by id
-	createComponent: ({ id }) => {
+	// Right after a group's tabs: "+", to open (or move) a panel into this group.
+	createLeftHeaderActionComponent: (group) => {
+		const actions = document.createElement("div")
+		actions.className = "group-actions"
+		actions.innerHTML = `<button type="button" class="tab-plus" title="open a panel here" aria-haspopup="true">${PLUS_ICON}</button>`
+		actions.querySelector("button")!.addEventListener("click", (event) => openPlusMenu(event.currentTarget as HTMLElement, group))
+		return { element: actions, init: () => {}, dispose: () => {} }
+	},
+	createComponent: ({ id, name }) => {
+		if (name === "file") return createFilePane(id)
 		const content = element(`pane-${id}`)
 		return {
 			element: content,
-			init: () => {},
+			init: () => {
+				if (id === "code") queueMicrotask(() => {
+					ensureCodeEditor()
+					if (lastCodeCall) renderCode(lastCodeCall)
+				})
+			},
 			// Closing a panel disposes its renderer: park the content so it is still in the document.
 			dispose: () => parking.append(content),
 		}
@@ -1442,20 +1737,69 @@ function setPanelTitle(id: PanelId, title: string) {
 	dock.getPanel(id)?.api.setTitle(title)
 }
 
+// Shown and expanded. Clicking the side bar's active tab collapses it to a strip (dockview); the activity bar
+// already shows and hides it, so a collapse just hides it.
+function showSideBar() {
+	dock.setEdgeGroupVisible("right", true)
+	const group = dock.getEdgeGroup("right")
+	if (group?.isCollapsed()) group.expand()
+}
+let watchedSideBarId: string | null = null
+function watchSideBarCollapse() {
+	const group = dock.getEdgeGroup("right")
+	if (!group || watchedSideBarId === group.id) return
+	watchedSideBarId = group.id
+	group.onDidCollapsedChange(({ isCollapsed }: { isCollapsed: boolean }) => {
+		if (!isCollapsed) return
+		group.expand()
+		dock.setEdgeGroupVisible("right", false)
+		renderActivityBar()
+	})
+}
+
+function sideBar() {
+	const group = dock.getEdgeGroup("right") ?? dock.addEdgeGroup("right", { id: "side-bar", initialSize: Math.max(420, Math.round(window.innerWidth * 0.38)), minimumSize: 240 })
+	group.setHeaderPosition("top") // edge groups put their tabs on the outer edge by default, next to the activity bar
+	watchSideBarCollapse()
+	return group
+}
+const isInSideBar = (id: PanelId) => dock.getPanel(id)?.group.id === dock.getEdgeGroup("right")?.id
+
 function openPanel(id: PanelId) {
 	const existing = dock.getPanel(id)
-	if (existing) return existing.api.setActive()
+	if (existing) {
+		if (isInSideBar(id)) showSideBar()
+		return existing.api.setActive()
+	}
 	const panel = PANELS.find((panel) => panel.id === id)!
-	const position = panel.positions.find((position) => !("referencePanel" in position) || dock.getPanel(position.referencePanel as string))
-	dock.addPanel({ id, component: id, title: panelTitles.get(id)!, ...(dock.panels.length && position ? { position } : {}) })
+	if (panel.place === "side") {
+		const group = sideBar()
+		showSideBar()
+		return dock.addPanel({ id, component: id, title: panelTitles.get(id)!, position: { referenceGroup: group.id } })
+	}
+	// Chart above Steps on the left, Decision on the right: the first neighbor that is open decides.
+	const NEIGHBORS: Record<string, [PanelId, "left" | "right" | "above" | "below"][]> = {
+		run: [["steps", "above"], ["decision", "left"]],
+		steps: [["run", "below"], ["decision", "left"]],
+		decision: [["run", "right"], ["steps", "right"]],
+	}
+	const neighbor = NEIGHBORS[id]!.find(([other]) => dock.getPanel(other) && !isInSideBar(other))
+	const mainGroups = dock.groups.filter((group) => group.id !== dock.getEdgeGroup("right")?.id)
+	const position = neighbor ? { referencePanel: neighbor[0], direction: neighbor[1] }
+		: mainGroups[0] ? { referenceGroup: mainGroups[0].id } : undefined
+	dock.addPanel({ id, component: id, title: panelTitles.get(id)!, ...(position ? { position } : {}) })
 }
 
 function defaultLayout() {
 	dock.clear()
-	for (const id of ["run", "decision", "code", "world", "sweep"] as const) openPanel(id)
-	dock.getPanel("run")!.group.api.setSize({ width: 600, height: 600 })
-	dock.getPanel("world")!.group.api.setSize({ height: 250 })
-	dock.getPanel("code")!.group.api.setSize({ width: Math.max(360, (window.innerWidth - 600) * 0.48) })
+	openPanel("run")
+	openPanel("decision")
+	openPanel("steps")
+	dock.getPanel("run")!.group.api.setSize({ width: Math.round(window.innerWidth * 0.55), height: Math.max(300, Math.round(element("dock").clientHeight * 0.62)) })
+	sideBar()
+	for (const id of ["code", "sweep"] as const) openPanel(id)
+	dock.getPanel("code")!.api.setActive()
+	dock.setEdgeGroupVisible("right", false)
 }
 
 function loadLayout() {
@@ -1463,6 +1807,9 @@ function loadLayout() {
 		const saved = localStorage.getItem(LAYOUT_STORAGE_KEY)
 		if (saved) {
 			dock.fromJSON(JSON.parse(saved))
+			dock.getEdgeGroup("right")?.setHeaderPosition("top")
+			if (dock.getEdgeGroup("right")?.isCollapsed()) dock.getEdgeGroup("right")!.expand()
+			watchSideBarCollapse()
 			for (const panel of PANELS) setPanelTitle(panel.id, panelTitles.get(panel.id)!) // titles come from the page, not the saved layout
 			return
 		}
@@ -1470,18 +1817,76 @@ function loadLayout() {
 	defaultLayout()
 }
 
-function renderPanelToggles() {
-	element("panel-toggles").innerHTML = PANELS.map((panel) =>
-		`<button type="button" data-panel="${panel.id}" aria-pressed="${dock.getPanel(panel.id) ? "true" : "false"}" title="show/hide">${panel.title}</button>`).join("")
+function resetLayout() {
+	try { localStorage.removeItem(LAYOUT_STORAGE_KEY) } catch {}
+	defaultLayout()
 }
 
-element("panel-toggles").addEventListener("click", (event) => {
-	const button = (event.target as Element).closest("button[data-panel]") as HTMLElement | null
+// Shown: open, and the visible tab of a visible group. (A hidden side bar's panels still count as visible to dockview.)
+const isPanelShown = (id: PanelId) => (dock.getPanel(id)?.api.isVisible ?? false) && (!isInSideBar(id) || dock.isEdgeGroupVisible("right"))
+
+function renderActivityBar() {
+	element("activity-bar").innerHTML = PANELS.map((panel) => {
+		const isShown = isPanelShown(panel.id)
+		return `<button type="button" data-panel="${panel.id}" aria-pressed="${isShown}" title="${isShown ? "hide" : "show"} ${panel.title}" aria-label="${panel.title}">${panel.icon}</button>`
+	}).join("") + `<button type="button" class="reset" data-reset title="reset layout" aria-label="reset layout">${RESET_ICON}</button>`
+}
+
+// The "+" menu: every panel not in this group. Closed ones open here, open ones move here.
+const plusMenu = element("plus-menu")
+let plusMenuButton: HTMLElement | null = null
+function openPlusMenu(button: HTMLElement, group: DockviewGroupPanel) {
+	if (plusMenuButton === button) return closePlusMenu()
+	closePlusMenu()
+	const panels = PANELS.filter((panel) => dock.getPanel(panel.id)?.group.id !== group.id)
+	plusMenu.innerHTML = (panels.length
+		? panels.map((panel) => `<button type="button" data-panel="${panel.id}">${panel.icon}${panel.title}<span class="muted small">${isPanelShown(panel.id) ? "move here" : "open here"}</span></button>`).join("")
+		: `<div class="menu-title">all panels are here</div>`)
+		+ `<div class="menu-title menu-separated-title">files</div>`
+		+ CODE_FILES.map((file) => `<button type="button" data-file="${file}">${FILE_ICON}${file}<span class="muted small">open here</span></button>`).join("")
+	plusMenu.hidden = false
+	const bounds = button.getBoundingClientRect()
+	plusMenu.style.top = `${bounds.bottom + 2}px`
+	plusMenu.style.left = `${Math.min(bounds.left, window.innerWidth - plusMenu.offsetWidth - 8)}px`
+	plusMenuButton = button
+	button.setAttribute("aria-expanded", "true")
+	plusMenu.onclick = (event) => {
+		const file = (event.target as Element).closest<HTMLElement>("button[data-file]")?.dataset["file"]
+		if (file) {
+			openFileTab(file, 1, true, group)
+			return closePlusMenu()
+		}
+		const id = (event.target as Element).closest<HTMLElement>("button[data-panel]")?.dataset["panel"] as PanelId | undefined
+		if (!id) return
+		const panel = dock.getPanel(id)
+		if (panel) panel.api.moveTo({ group, position: "center" })
+		else dock.addPanel({ id, component: id, title: panelTitles.get(id)!, position: { referenceGroup: group } })
+		closePlusMenu()
+		renderActivityBar()
+	}
+}
+function closePlusMenu() {
+	plusMenuButton?.setAttribute("aria-expanded", "false")
+	plusMenuButton = null
+	plusMenu.hidden = true
+}
+document.addEventListener("mousedown", (event) => {
+	if (plusMenuButton && !plusMenu.contains(event.target as Node) && !plusMenuButton.contains(event.target as Node)) closePlusMenu()
+})
+document.addEventListener("keydown", (event) => {
+	if (event.key === "Escape" && plusMenuButton) closePlusMenu()
+})
+
+element("activity-bar").addEventListener("click", (event) => {
+	const button = (event.target as Element).closest<HTMLElement>("button")
 	if (!button) return
+	if ("reset" in button.dataset) return resetLayout()
 	const id = button.dataset["panel"] as PanelId
-	const panel = dock.getPanel(id)
-	if (panel) panel.api.close()
-	else openPanel(id)
+	if (!isPanelShown(id)) openPanel(id)
+	else if (isInSideBar(id)) dock.setEdgeGroupVisible("right", false)
+	else dock.getPanel(id)!.api.close()
+	renderActivityBar() // dockview batches its layout-change events, so don't wait for them
+	if (isSweepStale && isSweepVisible()) renderSweep()
 })
 
 // Middle-click a tab to close its panel, like browser tabs.
@@ -1497,13 +1902,13 @@ element("dock").addEventListener("auxclick", (event) => {
 
 // A permalink names the commit, so it keeps showing this code after later deploys.
 const SITE_URL = "https://deceptive-search.gustaf.website"
-const COPY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`
+const LINK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`
 const CHECK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
 const permalinkButton = element<HTMLButtonElement>("copy-permalink")
-permalinkButton.innerHTML = COPY_ICON
+permalinkButton.innerHTML = LINK_ICON
 permalinkButton.title = buildIsDirty
-	? `copy permalink (commit ${buildCommit}; this build also has uncommitted changes, which the link won't show)`
-	: `copy permalink (commit ${buildCommit})`
+	? `copy link to this view (commit ${buildCommit}; this build also has uncommitted changes, which the link won't show)`
+	: `copy link to this view (commit ${buildCommit})`
 permalinkButton.addEventListener("click", async () => {
 	const url = `${SITE_URL}/visualization/${buildCommit}/${location.hash}`
 	try {
@@ -1512,21 +1917,75 @@ permalinkButton.addEventListener("click", async () => {
 	} catch {
 		prompt("copy this link", url)
 	}
-	setTimeout(() => (permalinkButton.innerHTML = COPY_ICON), 1500)
+	setTimeout(() => (permalinkButton.innerHTML = LINK_ICON), 1500)
 })
 
-element("reset-layout").addEventListener("click", () => {
-	try { localStorage.removeItem(LAYOUT_STORAGE_KEY) } catch {}
-	defaultLayout()
+// Which version this is: "latest" on the site's latest link, else the commit. Click: the deployed versions, to switch.
+const versionButton = element<HTMLButtonElement>("version")
+const versionMenu = element("version-menu")
+const isLatest = location.pathname.includes("/visualization/latest/")
+const isDeployed = location.pathname.includes("/visualization/")
+versionButton.innerHTML = `${lucide(`<circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/>`)}<span>${isLatest ? "latest" : buildCommit.slice(0, 7)}${buildIsDirty ? "*" : ""}</span>`
+versionButton.title = `${isLatest ? "latest version, " : ""}commit ${buildCommit}${buildIsDirty ? " with uncommitted changes" : ""}; click to switch versions`
+type Version = { commit: string; date: string; message: string }
+async function openVersionMenu() {
+	versionMenu.hidden = false
+	versionButton.setAttribute("aria-expanded", "true")
+	versionMenu.innerHTML = `<div class="menu-title">loading versions…</div>`
+	let versions: Version[]
+	try {
+		// The deploy script writes this list next to the version folders.
+		const response = await fetch(new URL("../versions.json", location.href))
+		if (!response.ok) throw new Error(String(response.status))
+		versions = await response.json()
+	} catch {
+		versionMenu.innerHTML = `<div class="menu-title">${isDeployed ? "couldn't load the list of versions" : "a local build: versions are listed on the site"}</div>`
+			+ `<a href="https://github.com/gggscript/deceptive-search/commit/${buildCommit}">commit ${buildCommit.slice(0, 7)} on GitHub</a>`
+		return
+	}
+	const link = (folder: string) => `../${folder}/${location.hash}`
+	versionMenu.innerHTML = `<a href="${link("latest")}" class="${isLatest ? "current" : ""}"><b>latest</b><span class="muted">${escapeHtml(versions[0]?.commit.slice(0, 7) ?? "")}</span></a>`
+		+ versions.map((version) => `<a href="${link(version.commit)}" class="${!isLatest && version.commit === buildCommit ? "current" : ""}" title="${escapeHtml(version.message)}">`
+			+ `<code>${escapeHtml(version.commit.slice(0, 7))}</code><span class="muted">${escapeHtml(version.date)}</span><span class="message">${escapeHtml(version.message)}</span></a>`).join("")
+}
+function closeVersionMenu() {
+	versionMenu.hidden = true
+	versionButton.setAttribute("aria-expanded", "false")
+}
+versionButton.addEventListener("click", () => (versionMenu.hidden ? openVersionMenu() : closeVersionMenu()))
+document.addEventListener("mousedown", (event) => {
+	if (!versionMenu.hidden && !versionMenu.contains(event.target as Node) && !versionButton.contains(event.target as Node)) closeVersionMenu()
+})
+document.addEventListener("keydown", (event) => {
+	if (event.key === "Escape") closeVersionMenu()
+})
+
+// Keyboard shortcuts: a popover from the status bar, or press "?".
+const KEYBOARD_ICON = lucide(`<path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/>`)
+const shortcutsButton = element<HTMLButtonElement>("shortcuts")
+const shortcutsPopover = element("shortcuts-popover")
+shortcutsButton.innerHTML = KEYBOARD_ICON
+function setShortcutsOpen(isOpen: boolean) {
+	shortcutsPopover.hidden = !isOpen
+	shortcutsButton.setAttribute("aria-expanded", String(isOpen))
+}
+shortcutsButton.addEventListener("click", () => setShortcutsOpen(shortcutsPopover.hidden === true))
+document.addEventListener("mousedown", (event) => {
+	if (!shortcutsPopover.hidden && !shortcutsPopover.contains(event.target as Node) && !shortcutsButton.contains(event.target as Node)) setShortcutsOpen(false)
+})
+document.addEventListener("keydown", (event) => {
+	if (event.key === "Escape") setShortcutsOpen(false)
+	else if (event.key === "?" && !(event.target as Element).closest("input, select")) setShortcutsOpen(shortcutsPopover.hidden === true)
 })
 
 // Switching tabs within a group may not count as a layout change.
 dock.onDidActivePanelChange(() => {
+	renderActivityBar()
 	if (isSweepStale && isSweepVisible()) renderSweep()
 })
 
 dock.onDidLayoutChange(() => {
-	renderPanelToggles()
+	renderActivityBar()
 	if (isSweepStale && isSweepVisible()) renderSweep()
 	try { localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(dock.toJSON())) } catch {}
 })
@@ -1534,13 +1993,13 @@ dock.onDidLayoutChange(() => {
 /* ---------- start ---------- */
 
 loadLayout()
-renderPanelToggles()
+renderActivityBar()
 
 const initialPosition = new URLSearchParams(location.hash.slice(1))
 element<HTMLInputElement>("show-all-calls").checked = initialPosition.get("allCalls") === "1"
 state.selectedStepIndex = Math.max(0, Number(initialPosition.get("step") ?? 1) - 1)
 const initialRowPath = (initialPosition.get("row") ?? "").split(".").filter(Boolean).map(Number)
-renderThemeButton()
+applyTheme()
 renderParameterInputs()
 renderSweepControls()
 setParameters(state.parameters)

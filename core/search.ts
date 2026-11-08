@@ -4,14 +4,15 @@
 // Except with world.fullDepthPredictions: the movers a deciding actor predicts directly search with their own
 // full depth (predictions inside those are capped again, so recursion still ends).
 
-import { actors, availableActions, takeStep, utility, type Action, type Actor, type World } from "./world"
+import { actors, availableActions, distance, takeStep, type Action, type Actor, type World } from "./world"
 
-// How good taking `action` is for an actor that wants `targetBananas`, looking `searchDepth` moves ahead.
+// How bad taking `action` is for an actor that wants `targetBananas`, looking `searchDepth` moves ahead:
+// the distance to its target after each of those moves, summed. Lower is better (like golf).
 // The target is fixed when the search starts: the actor judges the future by what it wants now.
 // `nesting`: how deep this search sits inside predictions (0 = the actor actually deciding).
 export function scoreAction(targetBananas: number, world: World, action: Action, searchDepth: number, nesting = 0): number {
 	const nextWorld = takeStep(world, action)
-	return utility(targetBananas, nextWorld) + scoreFuture(targetBananas, nextWorld, searchDepth - 1, nesting)
+	return distance(targetBananas, nextWorld) + scoreFuture(targetBananas, nextWorld, searchDepth - 1, nesting)
 }
 
 // Every later move is predicted by running the moving actor's search on that future world.
@@ -25,14 +26,14 @@ function scoreFuture(targetBananas: number, world: World, remainingDepth: number
 	return scoreAction(targetBananas, world, predictedAction, remainingDepth, nesting)
 }
 
-// The action with the highest score. Ties go to the earliest action (doNothing first).
+// The action with the lowest score. Ties go to the earliest action (doNothing first).
 export function chooseAction(actor: Actor, world: World, searchDepth: number, nesting = 0): Action {
 	const targetBananas = actor.targetBananas(world)
 	let bestAction = actor.actions[0]! // doNothing, always available
-	let bestScore = -Infinity
+	let bestScore = Infinity
 	for (const action of availableActions(actor, world)) {
 		const actionScore = scoreAction(targetBananas, world, action, searchDepth, nesting)
-		if (actionScore > bestScore) {
+		if (actionScore < bestScore) {
 			bestAction = action
 			bestScore = actionScore
 		}

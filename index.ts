@@ -20,7 +20,7 @@ let world: World = {
 	isDeployed: false,
 	stepsUntilDeployment: numberFlag("deployAfterStep", 0) > 0 ? numberFlag("deployAfterStep", 0) : null,
 	agentCanChangeOwnTarget: numberFlag("agentCanChangeOwnTarget", 1) !== 0,
-	fullDepthPredictions: numberFlag("fullDepthPredictions", 0) !== 0,
+	fullDepthPredictions: numberFlag("fullDepthPredictions", 1) !== 0,
 }
 const stepCount = numberFlag("stepCount", 16)
 const pauseBetweenSteps = process.argv.includes("--step")

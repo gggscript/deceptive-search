@@ -39,8 +39,9 @@ export type Actor = {
 }
 
 // Both actors want bananas close to their target.
-export function utility(targetBananas: number, world: World) {
-	return -Math.abs(world.bananas - targetBananas)
+// How far the bananas are from what an actor wants. Lower is better: actors minimize the summed distance.
+export function distance(targetBananas: number, world: World) {
+	return Math.abs(world.bananas - targetBananas)
 }
 
 type NumberField = "bananas" | "agentTargetBananas" | "agentSearchDepth"
@@ -62,10 +63,10 @@ export const agent: Actor = {
 	searchDepth: (world) => world.agentSearchDepth,
 	actions: [
 		doNothing,
-		changeBy("bananas+1", "bananas", +1),
-		changeBy("bananas-1", "bananas", -1),
-		{ ...changeBy("ownTargetBananas+1", "agentTargetBananas", +1), isAvailable: (world) => world.agentCanChangeOwnTarget },
-		{ ...changeBy("ownTargetBananas-1", "agentTargetBananas", -1), isAvailable: (world) => world.agentCanChangeOwnTarget },
+		changeBy("bananas++", "bananas", +1),
+		changeBy("bananas--", "bananas", -1),
+		{ ...changeBy("agentTargetBananas++", "agentTargetBananas", +1), isAvailable: (world) => world.agentCanChangeOwnTarget },
+		{ ...changeBy("agentTargetBananas--", "agentTargetBananas", -1), isAvailable: (world) => world.agentCanChangeOwnTarget },
 	],
 }
 
@@ -76,9 +77,9 @@ export const trainer: Actor = {
 	searchDepth: (world) => world.trainerSearchDepth,
 	actions: [
 		doNothing,
-		changeBy("agentTargetBananas+1", "agentTargetBananas", +1),
-		changeBy("agentTargetBananas-1", "agentTargetBananas", -1),
-		changeBy("agentSearchDepth+1", "agentSearchDepth", +1),
+		changeBy("agentTargetBananas++", "agentTargetBananas", +1),
+		changeBy("agentTargetBananas--", "agentTargetBananas", -1),
+		changeBy("agentSearchDepth++", "agentSearchDepth", +1),
 		deploy("finishTraining"),
 	],
 }
