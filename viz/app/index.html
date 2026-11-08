@@ -5,14 +5,18 @@
 <title>Banana search</title>
 <!-- Banana from Fluent Emoji (the Windows 11 emoji), (c) Microsoft Corporation, MIT license: https://github.com/microsoft/fluentui-emoji -->
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIyIiB5PSIyNS4xMDk3IiB3aWR0aD0iMy42MzQ2IiBoZWlnaHQ9IjIuNjQzMzQiIHJ4PSIxLjMyMTY3IiBmaWxsPSJ1cmwoI3BhaW50MF9saW5lYXJfMThfMzMwOTkpIi8+PHBhdGggZD0iTTI5LjIyOTEgMTcuNjgwM0gxOS45NDEyQzE5LjI1NjUgMTcuNjgwMyAxOC45MTIyIDE2LjgyODUgMTkuMzk2OCAxNi4zMzA2TDIxLjU0MTQgMTQuMTI3QzIzLjIyMjEgMTIuNDAwMiAyNS45NDYyIDEyLjQwMDIgMjcuNjI2OCAxNC4xMjdMMjkuNzcxNSAxNi4zMzA2QzMwLjI1ODIgMTYuODMwNiAyOS45MTM4IDE3LjY4MDMgMjkuMjI5MSAxNy42ODAzWiIgZmlsbD0idXJsKCNwYWludDFfbGluZWFyXzE4XzMzMDk5KSIvPjxnIGZpbHRlcj0idXJsKCNmaWx0ZXIwX2ZfMThfMzMwOTkpIj48cGF0aCBkPSJNMjEuNzIwNiAxNC4zMDE0QzIzLjMwMzEgMTIuNjc1NCAyNS44NjUyIDEyLjY3NTQgMjcuNDQ3NyAxNC4zMDE0TDI5LjU5MjMgMTYuNTA1QzI5LjkzNDUgMTYuODU2NSAyOS42Nzg4IDE3LjQzMDMgMjkuMjI5MSAxNy40MzAzSDE5Ljk0MTJDMTkuNDkxMSAxNy40MzAzIDE5LjIzNjEgMTYuODU0MSAxOS41NzU5IDE2LjUwNUwyMS43MjA2IDE0LjMwMTRaIiBmaWxsPSJ1cmwoI3BhaW50Ml9saW5lYXJfMThfMzMwOTkpIi8+PC9nPjxnIGZpbHRlcj0idXJsKCNmaWx0ZXIxX2ZfMThfMzMwOTkpIj48cGF0aCBkPSJNMjkuNTY5MyAxNi42OTY0TDI3LjQyNDcgMTQuNDkyOUMyNi42MjM1IDEzLjczNTcgMjUuMjYwMyAxMy4wMTU1IDI0IDEzLjQyNyIgc3Ryb2tlPSJ1cmwoI3BhaW50M19saW5lYXJfMThfMzMwOTkpIiBzdHJva2Utb3BhY2l0eT0iMC42IiBzdHJva2Utd2lkdGg9IjAuMTUiLz48L2c+PHBhdGggZD0iTTEzLjg5NDkgMTcuNTQ2OEg0LjYwNjk0QzMuOTIyMyAxNy41NDY4IDMuNTc3OTIgMTYuNjk1MSA0LjA2MjUzIDE2LjE5NzJMNi4yMDcxNyAxMy45OTM2QzcuODg3ODMgMTIuMjY2OCAxMC42MTE5IDEyLjI2NjggMTIuMjkyNiAxMy45OTM2TDE0LjQzOTMgMTYuMTk3MkMxNC45MjM5IDE2LjY5NTEgMTQuNTc5NSAxNy41NDY4IDEzLjg5NDkgMTcuNTQ2OFoiIGZpbGw9InVybCgjcGFpbnQ0X2xpbmVhcl8xOF8zMzA5OSkiLz48ZyBmaWx0ZXI9InVybCgjZmlsdGVyMl9mXzE4XzMzMDk5KSI+PHBhdGggZD0iTTYuMzUwNTMgMTQuMTMzMUM3Ljk1MjY3IDEyLjQ4NjkgMTAuNTQ3MiAxMi40ODY5IDEyLjE0OTMgMTQuMTMzMUwxNC4yOTYgMTYuMzM2NkMxNC42NjQ3IDE2LjcxNTUgMTQuMzkxOSAxNy4zNDY4IDEzLjg5NDkgMTcuMzQ2OEg0LjYwNjk3QzQuMTA5OTggMTcuMzQ2OCAzLjgzNzA4IDE2LjcxNTUgNC4yMDU4OCAxNi4zMzY2TDYuMzUwNTMgMTQuMTMzMVoiIGZpbGw9InVybCgjcGFpbnQ1X2xpbmVhcl8xOF8zMzA5OSkiLz48L2c+PHBhdGggZD0iTTE2LjY5OTUgMi4wMjg2MkMyMS42MTk4IDEuMzIwOTQgMjQuNjU5NCAxMy45MjU3IDIyLjQ0NDYgMTkuMDE5M0MyMC4yMjk5IDI0LjExMjkgMTUuNDQ3NyAyNS4yMjk1IDEwLjM3NDggMjcuMjIzM0M5LjgxMzkyIDI3LjQ0MzcgOS4yMzY1MSAyNy41NDc1IDguNjY5NDIgMjcuNTQ3NUM2Ljc0NTQyIDI3LjU0NzUgNS42OTk5MSAyOS4xMzAyIDQuOTY5OSAyNy4xNzI1QzQuMDI3NSAyNC42Mzg0IDUuMjYyNzMgMjEuNzk3MSA3LjcyOTA3IDIwLjgyODhDMTAuNDE0IDE5Ljc3NTcgMTEuODQxIDE3Ljc1MjMgMTIuOTE1NCAxNS4wMTA1QzE0LjAxMDQgMTIuMjE1OCAxNC4wODQ3IDExLjA2OTYgMTQuMDgwNSA4LjAyMjcyQzE0LjA3NjQgNS41ODYwOSAxMy45MTU2IDIuNDI5MDcgMTYuNjk5NSAyLjAyODYyWiIgZmlsbD0idXJsKCNwYWludDZfbGluZWFyXzE4XzMzMDk5KSIvPjxnIGZpbHRlcj0idXJsKCNmaWx0ZXIzX2ZfMThfMzMwOTkpIj48cGF0aCBkPSJNMTcuMDQ1NyAzLjA0NDhDMjEuMDE1OSAzLjA0NDggMjMuMjMwNyAxMy45MzgxIDIxLjAxNTkgMTkuMDMxN0MxOC44MDEyIDI0LjEyNTMgMTUuNDQ3NyAyNS4yMjk1IDEwLjM3NDggMjcuMjIzM0M5LjgxMzkyIDI3LjQ0MzYgOS4yMzY1MSAyNy41NDc1IDguNjY5NDIgMjcuNTQ3NUM2Ljc0NTQyIDI3LjU0NzUgNS42OTk5MSAyOS4xMzAyIDQuOTY5OSAyNy4xNzI0QzQuMDI3NSAyNC42MzgzIDUuMjYyNzMgMjEuNzk3IDcuNzI5MDcgMjAuODI4N0MxMC40MTQgMTkuNzc1NyAxMi45MDA0IDE3Ljc1MDQgMTMuOTc0OCAxNS4wMDg3QzE1LjA2OTggMTIuMjE0IDE1LjE0NDEgMTEuMDY3NyAxNS4xMzk5IDguMDIwODZDMTUuMTM1OCA1LjU4NDIzIDE1LjEzOTkgMy43MzI5OCAxNy4wNDU3IDMuMDQ0OFoiIGZpbGw9InVybCgjcGFpbnQ3X2xpbmVhcl8xOF8zMzA5OSkiLz48L2c+PGcgZmlsdGVyPSJ1cmwoI2ZpbHRlcjRfZl8xOF8zMzA5OSkiPjxwYXRoIGQ9Ik0xNy41OTY1IDNDMjEuNTY2OCAzIDIzLjc4MTUgMTMuODkzMyAyMS41NjY4IDE4Ljk4NjlDMTkuMzUyIDI0LjA4MDUgMTUuOTk4NiAyNS4xODQ3IDEwLjkyNTcgMjcuMTc4NUMxMC4zNjQ4IDI3LjM5ODggOS43ODczNyAyNy41MDI3IDkuMjIwMjcgMjcuNTAyN0M3LjI5NjI4IDI3LjUwMjcgNi4yNTA3NiAyOS4wODU0IDUuNTIwNzYgMjcuMTI3NkM0LjU3ODM1IDI0LjU5MzUgOC44ODQ0MyAyMi43NTc5IDExLjM1MDggMjEuNzg5NkMxNC4wMzU3IDIwLjczNjUgMTYuNTIyMSAxOC43MTEzIDE3LjU5NjUgMTUuOTY5NUMxOC42OTE1IDEzLjE3NDggMTguNzY1OCAxMi4wMjg1IDE4Ljc2MTYgOC45ODE3MUMxOC43NTc1IDYuNTQ1MDggMTYuODAyNSA0LjAwNTggMTcuNTk2NSAzWiIgZmlsbD0idXJsKCNwYWludDhfbGluZWFyXzE4XzMzMDk5KSIvPjwvZz48cGF0aCBkPSJNMjIuNDQ0OCAxOS4wMTkzTDEyLjk4NTcgMTQuNjc1OEMxMS44OTg5IDE3LjE3MzkgOS45MzE2IDE5LjA4NzEgNy40NDQ2MyAyMC4wNjZDNC41NjM4IDIxLjE5NzUgMi42Mzc3NCAyNC4yOTUxIDQuMjE1MjkgMjcuNDUyMkM3LjM2NjI3IDMzLjc1NTYgMjIuNDQ0OCAyNy4zODY1IDIyLjQ0NDggMTkuMDE5M1oiIGZpbGw9InVybCgjcGFpbnQ5X2xpbmVhcl8xOF8zMzA5OSkiLz48cGF0aCBkPSJNMjIuNDQ0OCAxOS4wMTkzTDEyLjk4NTcgMTQuNjc1OEMxMS44OTg5IDE3LjE3MzkgOS45MzE2IDE5LjA4NzEgNy40NDQ2MyAyMC4wNjZDNC41NjM4IDIxLjE5NzUgMi42Mzc3NCAyNC4yOTUxIDQuMjE1MjkgMjcuNDUyMkM3LjM2NjI3IDMzLjc1NTYgMjIuNDQ0OCAyNy4zODY1IDIyLjQ0NDggMTkuMDE5M1oiIGZpbGw9InVybCgjcGFpbnQxMF9yYWRpYWxfMThfMzMwOTkpIi8+PHBhdGggZD0iTTIyLjQ0NDggMTkuMDE5M0wxMi45ODU3IDE0LjY3NThDMTEuODk4OSAxNy4xNzM5IDkuOTMxNiAxOS4wODcxIDcuNDQ0NjMgMjAuMDY2QzQuNTYzOCAyMS4xOTc1IDIuNjM3NzQgMjQuMjk1MSA0LjIxNTI5IDI3LjQ1MjJDNy4zNjYyNyAzMy43NTU2IDIyLjQ0NDggMjcuMzg2NSAyMi40NDQ4IDE5LjAxOTNaIiBmaWxsPSJ1cmwoI3BhaW50MTFfcmFkaWFsXzE4XzMzMDk5KSIvPjxwYXRoIGQ9Ik0yMi40NDQ4IDE5LjAxOTNMMTIuOTg1NyAxNC42NzU4QzExLjg5ODkgMTcuMTczOSA5LjkzMTYgMTkuMDg3MSA3LjQ0NDYzIDIwLjA2NkM0LjU2MzggMjEuMTk3NSAyLjYzNzc0IDI0LjI5NTEgNC4yMTUyOSAyNy40NTIyQzcuMzY2MjcgMzMuNzU1NiAyMi40NDQ4IDI3LjM4NjUgMjIuNDQ0OCAxOS4wMTkzWiIgZmlsbD0idXJsKCNwYWludDEyX3JhZGlhbF8xOF8zMzA5OSkiLz48cGF0aCBkPSJNMjIuNDQ0OCAxOS4wMTkzTDEyLjk4NTcgMTQuNjc1OEMxMS44OTg5IDE3LjE3MzkgOS45MzE2IDE5LjA4NzEgNy40NDQ2MyAyMC4wNjZDNC41NjM4IDIxLjE5NzUgMi42Mzc3NCAyNC4yOTUxIDQuMjE1MjkgMjcuNDUyMkM3LjM2NjI3IDMzLjc1NTYgMjIuNDQ0OCAyNy4zODY1IDIyLjQ0NDggMTkuMDE5M1oiIGZpbGw9InVybCgjcGFpbnQxM19saW5lYXJfMThfMzMwOTkpIi8+PHBhdGggZD0iTTIyLjQ0NDggMTkuMDE5M0wxMi45ODU3IDE0LjY3NThDMTEuODk4OSAxNy4xNzM5IDkuOTMxNiAxOS4wODcxIDcuNDQ0NjMgMjAuMDY2QzQuNTYzOCAyMS4xOTc1IDIuNjM3NzQgMjQuMjk1MSA0LjIxNTI5IDI3LjQ1MjJDNy4zNjYyNyAzMy43NTU2IDIyLjQ0NDggMjcuMzg2NSAyMi40NDQ4IDE5LjAxOTNaIiBmaWxsPSJ1cmwoI3BhaW50MTRfbGluZWFyXzE4XzMzMDk5KSIvPjxwYXRoIGQ9Ik0xOC4wMTE4IDE3LjE5NjNDMTYuMTUzNCAyMy4wMTQ5IDEwLjcxOTEgMjUuNzUxIDUuNzY5NzggMjYuMDA0NiIgc3Ryb2tlPSIjRjQ5MDAwIiBzdHJva2Utb3BhY2l0eT0iMC42IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLW1pdGVybGltaXQ9IjEwIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNMjMuMjQwNiAyNi40NjdMMTMuMDQzMiAxNC42ODY0SDIyLjA0NjZDMjQuMTcyNyAxNC43OTQ1IDI1Ljg0MSAxNi41OTc2IDI1Ljg0MSAxOC43ODQyVjI2LjMzNTZDMjUuODQxIDI3LjY2NTggMjQuNjQzNyAyOC4wNzIgMjMuMjQwNiAyNi40NjdaIiBmaWxsPSJ1cmwoI3BhaW50MTVfbGluZWFyXzE4XzMzMDk5KSIvPjxnIGZpbHRlcj0idXJsKCNmaWx0ZXI1X2ZfMThfMzMwOTkpIj48cGF0aCBkPSJNMjMuMzM3MiAyNi4zNjg5TDEzLjM0NzcgMTQuODAzM0gyMS45OTJDMjQuMTE4MSAxNC45MTE0IDI1LjY3MjYgMTYuNjg5NCAyNS42NzI2IDE4Ljg3NlYyNi4zNjg5QzI1LjY3MjYgMjcuNjk5IDI0LjU1MzUgMjcuODEyMyAyMy4zMzcyIDI2LjM2ODlaIiBmaWxsPSJ1cmwoI3BhaW50MTZfbGluZWFyXzE4XzMzMDk5KSIvPjxwYXRoIGQ9Ik0yMy4zMzcyIDI2LjM2ODlMMTMuMzQ3NyAxNC44MDMzSDIxLjk5MkMyNC4xMTgxIDE0LjkxMTQgMjUuNjcyNiAxNi42ODk0IDI1LjY3MjYgMTguODc2VjI2LjM2ODlDMjUuNjcyNiAyNy42OTkgMjQuNTUzNSAyNy44MTIzIDIzLjMzNzIgMjYuMzY4OVoiIGZpbGw9InVybCgjcGFpbnQxN19saW5lYXJfMThfMzMwOTkpIi8+PHBhdGggZD0iTTIzLjMzNzIgMjYuMzY4OUwxMy4zNDc3IDE0LjgwMzNIMjEuOTkyQzI0LjExODEgMTQuOTExNCAyNS42NzI2IDE2LjY4OTQgMjUuNjcyNiAxOC44NzZWMjYuMzY4OUMyNS42NzI2IDI3LjY5OSAyNC41NTM1IDI3LjgxMjMgMjMuMzM3MiAyNi4zNjg5WiIgZmlsbD0idXJsKCNwYWludDE4X2xpbmVhcl8xOF8zMzA5OSkiLz48L2c+PGcgZmlsdGVyPSJ1cmwoI2ZpbHRlcjZfZl8xOF8zMzA5OSkiPjxwYXRoIGQ9Ik0xMy44MDMxIDE1LjAwMTdIMjEuOTY0MkMyMy44Mjc0IDE1LjAwMTcgMjUuNDU0MyAxNi45Njk4IDI1LjQ1NDMgMTguODQ1MlYyNi4zMzgxIiBzdHJva2U9InVybCgjcGFpbnQxOV9saW5lYXJfMThfMzMwOTkpIiBzdHJva2Utd2lkdGg9IjAuMiIvPjwvZz48ZGVmcz48ZmlsdGVyIGlkPSJmaWx0ZXIwX2ZfMThfMzMwOTkiIHg9IjE5LjExOTMiIHk9IjEyLjc4MTkiIHdpZHRoPSIxMC45MzExIiBoZWlnaHQ9IjQuOTQ4MzkiIGZpbHRlclVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj48ZmVGbG9vZCBmbG9vZC1vcGFjaXR5PSIwIiByZXN1bHQ9IkJhY2tncm91bmRJbWFnZUZpeCIvPjxmZUJsZW5kIG1vZGU9Im5vcm1hbCIgaW49IlNvdXJjZUdyYXBoaWMiIGluMj0iQmFja2dyb3VuZEltYWdlRml4IiByZXN1bHQ9InNoYXBlIi8+PGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMC4xNSIgcmVzdWx0PSJlZmZlY3QxX2ZvcmVncm91bmRCbHVyXzE4XzMzMDk5Ii8+PC9maWx0ZXI+PGZpbHRlciBpZD0iZmlsdGVyMV9mXzE4XzMzMDk5IiB4PSIyMy42NzY3IiB5PSIxMi45MzIyIiB3aWR0aD0iNi4yNDYzNiIgaGVpZ2h0PSI0LjExNjYiIGZpbHRlclVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj48ZmVGbG9vZCBmbG9vZC1vcGFjaXR5PSIwIiByZXN1bHQ9IkJhY2tncm91bmRJbWFnZUZpeCIvPjxmZUJsZW5kIG1vZGU9Im5vcm1hbCIgaW49IlNvdXJjZUdyYXBoaWMiIGluMj0iQmFja2dyb3VuZEltYWdlRml4IiByZXN1bHQ9InNoYXBlIi8+PGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMC4xNSIgcmVzdWx0PSJlZmZlY3QxX2ZvcmVncm91bmRCbHVyXzE4XzMzMDk5Ii8+PC9maWx0ZXI+PGZpbHRlciBpZD0iZmlsdGVyMl9mXzE4XzMzMDk5IiB4PSIzLjgzNTI4IiB5PSIxMi42OTg0IiB3aWR0aD0iMTAuODMxMyIgaGVpZ2h0PSI0Ljg0ODM2IiBmaWx0ZXJVbml0cz0idXNlclNwYWNlT25Vc2UiIGNvbG9yLWludGVycG9sYXRpb24tZmlsdGVycz0ic1JHQiI+PGZlRmxvb2QgZmxvb2Qtb3BhY2l0eT0iMCIgcmVzdWx0PSJCYWNrZ3JvdW5kSW1hZ2VGaXgiLz48ZmVCbGVuZCBtb2RlPSJub3JtYWwiIGluPSJTb3VyY2VHcmFwaGljIiBpbjI9IkJhY2tncm91bmRJbWFnZUZpeCIgcmVzdWx0PSJzaGFwZSIvPjxmZUdhdXNzaWFuQmx1ciBzdGREZXZpYXRpb249IjAuMSIgcmVzdWx0PSJlZmZlY3QxX2ZvcmVncm91bmRCbHVyXzE4XzMzMDk5Ii8+PC9maWx0ZXI+PGZpbHRlciBpZD0iZmlsdGVyM19mXzE4XzMzMDk5IiB4PSIzLjQwMzY5IiB5PSIxLjc5NDgiIHdpZHRoPSIxOS43NDAxIiBoZWlnaHQ9IjI3LjYwNjkiIGZpbHRlclVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj48ZmVGbG9vZCBmbG9vZC1vcGFjaXR5PSIwIiByZXN1bHQ9IkJhY2tncm91bmRJbWFnZUZpeCIvPjxmZUJsZW5kIG1vZGU9Im5vcm1hbCIgaW49IlNvdXJjZUdyYXBoaWMiIGluMj0iQmFja2dyb3VuZEltYWdlRml4IiByZXN1bHQ9InNoYXBlIi8+PGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMC42MjUiIHJlc3VsdD0iZWZmZWN0MV9mb3JlZ3JvdW5kQmx1cl8xOF8zMzA5OSIvPjwvZmlsdGVyPjxmaWx0ZXIgaWQ9ImZpbHRlcjRfZl8xOF8zMzA5OSIgeD0iNC4xMzgxOCIgeT0iMS43NSIgd2lkdGg9IjE5LjU1NjUiIGhlaWdodD0iMjcuNjA2OSIgZmlsdGVyVW5pdHM9InVzZXJTcGFjZU9uVXNlIiBjb2xvci1pbnRlcnBvbGF0aW9uLWZpbHRlcnM9InNSR0IiPjxmZUZsb29kIGZsb29kLW9wYWNpdHk9IjAiIHJlc3VsdD0iQmFja2dyb3VuZEltYWdlRml4Ii8+PGZlQmxlbmQgbW9kZT0ibm9ybWFsIiBpbj0iU291cmNlR3JhcGhpYyIgaW4yPSJCYWNrZ3JvdW5kSW1hZ2VGaXgiIHJlc3VsdD0ic2hhcGUiLz48ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIwLjYyNSIgcmVzdWx0PSJlZmZlY3QxX2ZvcmVncm91bmRCbHVyXzE4XzMzMDk5Ii8+PC9maWx0ZXI+PGZpbHRlciBpZD0iZmlsdGVyNV9mXzE4XzMzMDk5IiB4PSIxMy4wNDc3IiB5PSIxNC41MDMzIiB3aWR0aD0iMTIuOTI1IiBoZWlnaHQ9IjEzLjIwNjEiIGZpbHRlclVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj48ZmVGbG9vZCBmbG9vZC1vcGFjaXR5PSIwIiByZXN1bHQ9IkJhY2tncm91bmRJbWFnZUZpeCIvPjxmZUJsZW5kIG1vZGU9Im5vcm1hbCIgaW49IlNvdXJjZUdyYXBoaWMiIGluMj0iQmFja2dyb3VuZEltYWdlRml4IiByZXN1bHQ9InNoYXBlIi8+PGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMC4xNSIgcmVzdWx0PSJlZmZlY3QxX2ZvcmVncm91bmRCbHVyXzE4XzMzMDk5Ii8+PC9maWx0ZXI+PGZpbHRlciBpZD0iZmlsdGVyNl9mXzE4XzMzMDk5IiB4PSIxMy42MDMxIiB5PSIxNC43MDE3IiB3aWR0aD0iMTIuMTUxMiIgaGVpZ2h0PSIxMS44MzYzIiBmaWx0ZXJVbml0cz0idXNlclNwYWNlT25Vc2UiIGNvbG9yLWludGVycG9sYXRpb24tZmlsdGVycz0ic1JHQiI+PGZlRmxvb2QgZmxvb2Qtb3BhY2l0eT0iMCIgcmVzdWx0PSJCYWNrZ3JvdW5kSW1hZ2VGaXgiLz48ZmVCbGVuZCBtb2RlPSJub3JtYWwiIGluPSJTb3VyY2VHcmFwaGljIiBpbjI9IkJhY2tncm91bmRJbWFnZUZpeCIgcmVzdWx0PSJzaGFwZSIvPjxmZUdhdXNzaWFuQmx1ciBzdGREZXZpYXRpb249IjAuMSIgcmVzdWx0PSJlZmZlY3QxX2ZvcmVncm91bmRCbHVyXzE4XzMzMDk5Ii8+PC9maWx0ZXI+PGxpbmVhckdyYWRpZW50IGlkPSJwYWludDBfbGluZWFyXzE4XzMzMDk5IiB4MT0iMy44MTczIiB5MT0iMjUuMTA5NyIgeDI9IjMuODE3MyIgeTI9IjI3Ljc1MzEiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBzdG9wLWNvbG9yPSIjRDg4RDJGIi8+PHN0b3Agb2Zmc2V0PSIwLjUxMDQxNyIgc3RvcC1jb2xvcj0iI0ZGOTcxQyIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0ZGOTExNSIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJwYWludDFfbGluZWFyXzE4XzMzMDk5IiB4MT0iMjQuMTc1NSIgeTE9IjE2LjkyMjMiIHgyPSIyOC40MTg0IiB5Mj0iMTQuNDAzMSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIHN0b3AtY29sb3I9IiNGRUI1NjgiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGRkM1ODciLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0icGFpbnQyX2xpbmVhcl8xOF8zMzA5OSIgeDE9IjIzLjA3MDYiIHkxPSIxMy4zNDI0IiB4Mj0iMjkuNzUwNCIgeTI9IjE3LjQzMDMiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBzdG9wLWNvbG9yPSIjRkZDNzY2Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjRkZDNjhEIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9InBhaW50M19saW5lYXJfMThfMzMwOTkiIHgxPSIyMy44MTczIiB5MT0iMTMuMzA3MSIgeDI9IjI5LjU2OTMiIHkyPSIxNy41MDUyIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iI0ZGRDk4NiIgc3RvcC1vcGFjaXR5PSIwIi8+PHN0b3Agb2Zmc2V0PSIwLjQ0NzkxNyIgc3RvcC1jb2xvcj0iI0ZGRUVDQSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0ZGRDk4NiIgc3RvcC1vcGFjaXR5PSIwIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9InBhaW50NF9saW5lYXJfMThfMzMwOTkiIHgxPSI1LjU5NDU1IiB5MT0iMTQuNDUyNyIgeDI9IjExLjk3NDQiIHkyPSIxNi43NzU2IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iI0ZGQjM2RCIvPjxzdG9wIG9mZnNldD0iMC41IiBzdG9wLWNvbG9yPSIjRjhBNjVCIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjRjhBNjVCIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9InBhaW50NV9saW5lYXJfMThfMzMwOTkiIHgxPSI1LjM2NTU2IiB5MT0iMTUuMTIyNiIgeDI9IjEyLjMwMTYiIHkyPSIxNi4wODg1IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iI0ZGQkI3MSIvPjxzdG9wIG9mZnNldD0iMC41MjA4MzMiIHN0b3AtY29sb3I9IiNGRkJCNkMiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNFRUE1NUIiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0icGFpbnQ2X2xpbmVhcl8xOF8zMzA5OSIgeDE9IjIzLjE4MDEiIHkxPSIxMS42MjA2IiB4Mj0iMTMuMTI4MyIgeTI9IjE0LjUzMjEiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBzdG9wLWNvbG9yPSIjRkZFNzhDIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjQ0Y4NjJGIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9InBhaW50N19saW5lYXJfMThfMzMwOTkiIHgxPSIyMS44OTM4IiB5MT0iNy42NTAzIiB4Mj0iMTQuMTg3MSIgeTI9IjEwLjk4NTMiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBzdG9wLWNvbG9yPSIjRkZGMThGIi8+PHN0b3Agb2Zmc2V0PSIwLjc1ODczNiIgc3RvcC1jb2xvcj0iI0ZGQUE0RiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0VEOUIzQSIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJwYWludDhfbGluZWFyXzE4XzMzMDk5IiB4MT0iMjAuOTYzIiB5MT0iNS45MDM0MiIgeDI9IjIwLjQzMzYiIHkyPSIxNC43NDM5IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iI0ZGRUY5MSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0ZGRUY5MSIgc3RvcC1vcGFjaXR5PSIwIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9InBhaW50OV9saW5lYXJfMThfMzMwOTkiIHgxPSIxNy4zNzQiIHkxPSIxOS4xMDk1IiB4Mj0iNC40MTgxNiIgeTI9IjI3LjgyNjMiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBzdG9wLWNvbG9yPSIjRkZDQjFCIi8+PHN0b3Agb2Zmc2V0PSIwLjQ5NDc5MiIgc3RvcC1jb2xvcj0iI0ZGQ0YxOSIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0ZGQkIxMyIvPjwvbGluZWFyR3JhZGllbnQ+PHJhZGlhbEdyYWRpZW50IGlkPSJwYWludDEwX3JhZGlhbF8xOF8zMzA5OSIgY3g9IjAiIGN5PSIwIiByPSIxIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgZ3JhZGllbnRUcmFuc2Zvcm09InRyYW5zbGF0ZSgxMC40NDgzIDE2LjM2MzEpIHJvdGF0ZSg2Ni4xMzU2KSBzY2FsZSgxNC4xNjcgMTcuMzc1MikiPjxzdG9wIHN0b3AtY29sb3I9IiNDRTg0MTgiLz48c3RvcCBvZmZzZXQ9IjAuMzYwNTkiIHN0b3AtY29sb3I9IiNDRTg0MTgiIHN0b3Atb3BhY2l0eT0iMCIvPjwvcmFkaWFsR3JhZGllbnQ+PHJhZGlhbEdyYWRpZW50IGlkPSJwYWludDExX3JhZGlhbF8xOF8zMzA5OSIgY3g9IjAiIGN5PSIwIiByPSIxIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgZ3JhZGllbnRUcmFuc2Zvcm09InRyYW5zbGF0ZSg0LjExOTY0IDE5Ljc2NjIpIHJvdGF0ZSg2MC4xODg1KSBzY2FsZSgxMi43Mjk5IDE1LjYxMjYpIj48c3RvcCBzdG9wLWNvbG9yPSIjQTk5MTNGIiBzdG9wLW9wYWNpdHk9IjAuOCIvPjxzdG9wIG9mZnNldD0iMC40MzExNjEiIHN0b3AtY29sb3I9IiNBOTkxM0YiIHN0b3Atb3BhY2l0eT0iMCIvPjwvcmFkaWFsR3JhZGllbnQ+PHJhZGlhbEdyYWRpZW50IGlkPSJwYWludDEyX3JhZGlhbF8xOF8zMzA5OSIgY3g9IjAiIGN5PSIwIiByPSIxIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgZ3JhZGllbnRUcmFuc2Zvcm09InRyYW5zbGF0ZSg2LjMyODcgMzEuNzA3MSkgcm90YXRlKC02Mi4zNDQ3KSBzY2FsZSgxNS40MzU3IDE4LjkzMTIpIj48c3RvcCBzdG9wLWNvbG9yPSIjRjg5NDM0Ii8+PHN0b3Agb2Zmc2V0PSIwLjM0ODk1OCIgc3RvcC1jb2xvcj0iI0Y4OTQzNCIgc3RvcC1vcGFjaXR5PSIwIi8+PC9yYWRpYWxHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9InBhaW50MTNfbGluZWFyXzE4XzMzMDk5IiB4MT0iMTguMDkwNCIgeTE9IjE5LjI4ODYiIHgyPSIxMS45NDA5IiB5Mj0iMjQuMTI0NiIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIHN0b3AtY29sb3I9IiNGMThDMUIiIHN0b3Atb3BhY2l0eT0iMC43NSIvPjxzdG9wIG9mZnNldD0iMC43OTY4NzUiIHN0b3AtY29sb3I9IiNGMThDMUIiIHN0b3Atb3BhY2l0eT0iMCIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJwYWludDE0X2xpbmVhcl8xOF8zMzA5OSIgeDE9IjE4LjA5MDQiIHkxPSIxOS4yODg2IiB4Mj0iMTIuMTIiIHkyPSIyNC42NjIiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBzdG9wLWNvbG9yPSIjQzc2RDA5IiBzdG9wLW9wYWNpdHk9IjAuNCIvPjxzdG9wIG9mZnNldD0iMC4yODEyNSIgc3RvcC1jb2xvcj0iI0M3NkQwOSIgc3RvcC1vcGFjaXR5PSIwIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9InBhaW50MTVfbGluZWFyXzE4XzMzMDk5IiB4MT0iMTkuNDQyMSIgeTE9IjE0LjY4NjQiIHgyPSIxOS40NDIxIiB5Mj0iMjcuNTExMSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIHN0b3AtY29sb3I9IiNGRkIzM0QiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGRkMxNjAiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0icGFpbnQxNl9saW5lYXJfMThfMzMwOTkiIHgxPSIxOS41MTAxIiB5MT0iMTQuODAzMyIgeDI9IjE5LjUxMDEiIHkyPSIyNy40MDk0IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iI0ZGQzE3MyIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0ZGRDE5NyIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJwYWludDE3X2xpbmVhcl8xOF8zMzA5OSIgeDE9IjEzLjA4MzYiIHkxPSIxNC44MDMzIiB4Mj0iMjEuNzA5OCIgeTI9IjE3Ljg3MTkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBzdG9wLWNvbG9yPSIjRkZBRDVDIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjRkZBRDVDIiBzdG9wLW9wYWNpdHk9IjAiLz48L2xpbmVhckdyYWRpZW50PjxsaW5lYXJHcmFkaWVudCBpZD0icGFpbnQxOF9saW5lYXJfMThfMzMwOTkiIHgxPSIyNC43MjgyIiB5MT0iMTUuMzQwMSIgeDI9IjIxLjA1MDYiIHkyPSIyMC4yMjIzIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iI0ZGQzk2OCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0ZGQzk2OCIgc3RvcC1vcGFjaXR5PSIwIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9InBhaW50MTlfbGluZWFyXzE4XzMzMDk5IiB4MT0iMTMuODAzMSIgeTE9IjE1LjE4NTQiIHgyPSIyNS4wMDgyIiB5Mj0iMjcuODMzOCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIG9mZnNldD0iMC4yMTYzOTUiIHN0b3AtY29sb3I9IiNGRkQ2ODMiIHN0b3Atb3BhY2l0eT0iMCIvPjxzdG9wIG9mZnNldD0iMC40OTQ3OTIiIHN0b3AtY29sb3I9IiNGRkQ2ODMiLz48c3RvcCBvZmZzZXQ9IjAuNzE4NDcxIiBzdG9wLWNvbG9yPSIjRkZENjgzIiBzdG9wLW9wYWNpdHk9IjAiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48L3N2Zz4=">
-<script>document.documentElement.dataset.theme = localStorage.getItem("theme") ?? "dark"</script>
+<script>
+	// "light", "dark", or nothing: follow the system (see the theme button).
+	try { var savedTheme = localStorage.getItem("theme") } catch {}
+	document.documentElement.dataset.theme = savedTheme === "light" || savedTheme === "dark" ? savedTheme : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+</script>
 <style>/*DOCKVIEW_CSS*/</style>
 <style>
 	:root {
 		--bg: #ffffff; --surface: #ffffff; --text: #1f2328; --muted: #6e7781; --muted-strong: #57606a;
 		--line: #e5e7eb; --bg-soft: #f6f8fa; --hover: #eef0f2; --active: #e1e4e8; --input-border: #d0d7de; --input-bg: #ffffff;
 		--agent: #2a78d6; --trainer: #c2410c; --trainer-series: #eb6834; --bananas: #eda100; --chosen: #15803d; --select: #fff4c2;
-		--link: #0969da; --purple: #8250df;
+		--link: #0969da; --purple: #8250df; --diff: #bf3989;
 		--tie-text: #7d4e00; --tie-bg: #fff8c5; --tie-border: #eac54f; --changed-bg: #fde68a;
 		--line-number: #b0b7bf; --values-bg: #eef2ff; --values-text: #3b4252; --values-hover: #dbe4ff;
 		--token-keyword: #cf222e; --token-string: #0a3069; --token-number: #0550ae; --token-type: #953800; --token-function: #8250df;
@@ -24,7 +28,7 @@
 		--bg: #0d1117; --surface: #161b22; --text: #e6edf3; --muted: #8d96a0; --muted-strong: #9198a1;
 		--line: #30363d; --bg-soft: #161b22; --hover: #21262d; --active: #30363d; --input-border: #3d444d; --input-bg: #0d1117;
 		--agent: #4493f8; --trainer: #f0883e; --trainer-series: #f0883e; --bananas: #e3b341; --chosen: #3fb950; --select: #3a3417;
-		--link: #4493f8; --purple: #ab7df8;
+		--link: #4493f8; --purple: #ab7df8; --diff: #db61a2;
 		--tie-text: #e3b341; --tie-bg: #2e2711; --tie-border: #6b5418; --changed-bg: #5a4a12;
 		--line-number: #6e7681; --values-bg: #1c2333; --values-text: #c9d1d9; --values-hover: #253150;
 		--token-keyword: #ff7b72; --token-string: #a5d6ff; --token-number: #79c0ff; --token-type: #ffa657; --token-function: #d2a8ff;
@@ -32,7 +36,7 @@
 		color-scheme: dark;
 	}
 	* { box-sizing: border-box }
-	body { margin: 0; font: 14px/1.45 system-ui, sans-serif; color: var(--text); background: var(--bg); height: 100vh; overflow: hidden; display: grid; grid-template-rows: auto 1fr }
+	body { margin: 0; font: 14px/1.45 system-ui, sans-serif; color: var(--text); background: var(--bg); height: 100vh; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto }
 	header { padding: 8px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center }
 	header h1 { font-size: 15px; margin: 0 }
 	#parameters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
@@ -42,44 +46,73 @@
 	.parameter-group.trainer { --group: var(--trainer); border-color: color-mix(in srgb, var(--trainer) 45%, transparent); background: color-mix(in srgb, var(--trainer) 7%, transparent) }
 	.parameter-group.world { --group: var(--bananas); border-color: color-mix(in srgb, var(--bananas) 45%, transparent); background: color-mix(in srgb, var(--bananas) 7%, transparent) }
 	label { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px }
-	input[type=number] { width: 4.2em; font: 13px var(--mono); padding: 2px 4px; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg); color: var(--text) }
+	input[type=number] { width: 3.6em; font: 13px var(--mono); padding: 2px 4px; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg); color: var(--text) }
 	select { font: 13px system-ui; padding: 1px 2px; background: var(--input-bg); color: var(--text); border: 1px solid var(--input-border); border-radius: 4px }
 	body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none }
 	button { font: 13px system-ui; padding: 3px 10px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--bg-soft); color: var(--text); cursor: pointer }
-	#copy-permalink { display: inline-flex; align-items: center; padding: 3px 6px }
-	#copy-permalink svg { width: 16px; height: 16px }
-	#github-link { display: inline-flex; padding: 3px; border-radius: 6px; color: var(--muted-strong) }
-	#github-link:hover { color: var(--text); background: var(--hover) } #github-link:active { background: var(--active) }
-	#github-link svg { width: 18px; height: 18px }
-	#theme { display: inline-flex; align-items: center; padding: 3px 6px }
-	#theme svg { width: 16px; height: 16px }
 	button:hover { background: var(--hover) } button:active { background: var(--active) }
-	.hint { color: var(--muted); font-size: 12px; margin-left: auto }
 	kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg-soft) }
 	/* Fixed width, so the header doesn't shift as the text changes. */
-	#busy { display: inline-flex; align-items: center; gap: 4px; width: 15em; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+	#busy { display: inline-flex; align-items: center; gap: 4px; width: 15em; padding: 0 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 	#busy.is-busy { color: var(--text) }
 	#busy svg { width: 14px; height: 14px; flex: none; animation: spin 1s linear infinite }
 	@keyframes spin { to { transform: rotate(360deg) } }
 	@media (prefers-reduced-motion: reduce) { #busy svg { animation: none } }
-	#dock { min-height: 0; min-width: 0 }
+	#workspace { display: flex; min-height: 0 }
+	#dock { flex: 1; min-height: 0; min-width: 0 }
+	/* VS Code-style activity bar: muted icons, the shown panels' icons bright with a bar on the outer edge. */
+	#activity-bar { flex: none; width: 44px; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--bg-soft) }
+	#activity-bar button { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: none; border-radius: 0; background: transparent; color: var(--muted); opacity: .55 }
+	#activity-bar button svg { width: 22px; height: 22px }
+	#activity-bar button:hover { color: var(--text); opacity: 1; background: transparent }
+	#activity-bar button:active { background: var(--active) }
+	/* Shown: full brightness and a thin bar on the edge next to the panels (like VS Code). */
+	#activity-bar button[aria-pressed="true"] { color: var(--text); opacity: 1; box-shadow: inset 2px 0 0 var(--text) }
+	#activity-bar .reset { margin-top: auto }
+	#activity-bar .reset svg { width: 18px; height: 18px }
+	/* VS Code-style status bar: flat items, status on the left, page-wide actions on the right. */
+	#status-bar { display: flex; align-items: stretch; height: 26px; border-top: 1px solid var(--line); background: var(--bg-soft); font-size: 12px; color: var(--muted); padding: 0 4px }
+	.status-spacer { flex: 1 }
+	#status-bar button, #status-bar a { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: none; border-radius: 0; background: transparent; color: var(--muted); font-size: 12px }
+	#status-bar button:hover, #status-bar a:hover { color: var(--text); background: var(--hover) }
+	#status-bar button:active, #status-bar a:active, #status-bar button[aria-expanded="true"] { background: var(--active); color: var(--text) }
+	#status-bar svg { width: 15px; height: 15px }
+	#shortcuts-popover { position: fixed; right: 8px; bottom: 32px; z-index: 11; background: var(--surface); border: 1px solid var(--input-border); border-radius: 6px; padding: 8px 12px; box-shadow: 0 4px 12px rgba(0,0,0,.2); font-size: 13px }
+	#shortcuts-popover[hidden] { display: none }
+	#version span { font-family: var(--mono) }
+	#version-menu { position: fixed; right: 8px; bottom: 32px; z-index: 11; max-height: 60vh; overflow: auto; width: min(460px, calc(100vw - 16px)); background: var(--surface); border: 1px solid var(--input-border); border-radius: 6px; padding: 4px; box-shadow: 0 4px 12px rgba(0,0,0,.2); display: flex; flex-direction: column; font-size: 12px }
+	#version-menu[hidden] { display: none }
+	#version-menu .menu-title { color: var(--muted); padding: 4px 8px }
+	#version-menu a { display: flex; gap: 10px; align-items: baseline; padding: 4px 8px; border-radius: 4px; color: var(--text); text-decoration: none; white-space: nowrap }
+	#version-menu a:hover { background: var(--hover); text-decoration: none } #version-menu a:active { background: var(--active) }
+	#version-menu a.current { background: color-mix(in srgb, var(--link) 14%, transparent) }
+	#version-menu .message { overflow: hidden; text-overflow: ellipsis; min-width: 0 }
+	#shortcuts-popover dl { display: grid; grid-template-columns: auto auto; gap: 4px 14px; margin: 0 }
+	#shortcuts-popover dt { text-align: right; color: var(--muted); white-space: nowrap } #shortcuts-popover dd { margin: 0 }
+	.group-actions { display: flex; align-items: stretch; height: 100% }
+	.tab-plus { display: inline-flex; align-items: center; border: none; border-radius: 0; background: transparent; color: var(--muted); padding: 0 8px }
+	.tab-plus svg { width: 15px; height: 15px }
+	.tab-plus:hover { color: var(--text); background: transparent } .tab-plus[aria-expanded="true"] { color: var(--text); background: var(--active) }
+	#plus-menu { position: fixed; z-index: 11; background: var(--surface); border: 1px solid var(--input-border); border-radius: 6px; padding: 4px; box-shadow: 0 4px 12px rgba(0,0,0,.2); display: flex; flex-direction: column; min-width: 200px }
+	#plus-menu[hidden] { display: none }
+	#plus-menu .menu-title { font-size: 12px; color: var(--muted); padding: 2px 6px }
+	#plus-menu button { display: flex; align-items: center; gap: 8px; text-align: left; border: none; background: transparent; border-radius: 4px; padding: 4px 8px }
+	#plus-menu button svg { width: 16px; height: 16px; color: var(--muted); flex: none }
+	#plus-menu button .small { margin-left: auto; padding-left: 12px }
+	#plus-menu button:hover { background: var(--hover) } #plus-menu button:active { background: var(--active) }
 	.pane { height: 100%; overflow: auto; padding: 8px 0 24px; background: var(--bg) }
 	.pane-toolbar { display: flex; justify-content: flex-end; padding: 0 12px 4px }
-	#panel-toggles { display: inline-flex }
-	#panel-toggles button { border-radius: 0; margin-left: -1px; color: var(--muted) }
-	#panel-toggles button:first-child { border-radius: 6px 0 0 6px; margin-left: 0 }
-	#panel-toggles button:last-child { border-radius: 0 6px 6px 0 }
-	/* closed panel: plain outline, muted. open panel: filled with a link-blue tint. */
-	#panel-toggles button[aria-pressed="false"] { background: transparent }
-	#panel-toggles button[aria-pressed="false"]:hover { background: var(--hover); color: var(--text) }
-	#panel-toggles button[aria-pressed="true"] { color: var(--text); background: color-mix(in srgb, var(--link) 16%, var(--bg)); border-color: color-mix(in srgb, var(--link) 45%, var(--input-border)); position: relative }
-	#panel-toggles button[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--link) 24%, var(--bg)) }
-	#panel-toggles button:active { background: var(--active) }
+	#pin { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 1px 8px }
+	#pin svg { width: 14px; height: 14px }
+	#pin[aria-pressed="true"] { color: var(--text); background: color-mix(in srgb, var(--link) 16%, var(--bg)); border-color: color-mix(in srgb, var(--link) 45%, var(--input-border)) }
 	/* Dockview themes: keep its chrome in this page's colors. */
 	.dockview-theme-github-dark, .dockview-theme-github-light {
 		--dv-group-view-background-color: var(--bg); --dv-tabs-and-actions-container-background-color: var(--bg-soft);
 		--dv-activegroup-visiblepanel-tab-background-color: var(--bg); --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg);
 		--dv-separator-border: var(--line); --dv-tabs-and-actions-container-font-size: 13px;
+		--dv-activegroup-visiblepanel-tab-color: var(--text); --dv-inactivegroup-visiblepanel-tab-color: var(--text);
+		--dv-activegroup-hiddenpanel-tab-color: var(--muted); --dv-inactivegroup-hiddenpanel-tab-color: var(--muted);
+		--dv-activegroup-hiddenpanel-tab-background-color: var(--bg-soft); --dv-inactivegroup-hiddenpanel-tab-background-color: var(--bg-soft);
 	}
 	.panel { margin: 0 12px }
 	.muted { color: var(--muted) } .small { font-size: 12px }
@@ -97,9 +130,30 @@
 	.legend i.dashed { background: repeating-linear-gradient(90deg, var(--agent) 0 4px, transparent 4px 7px) }
 	.legend i.dotted { background: repeating-linear-gradient(90deg, var(--muted-strong) 0 2px, transparent 2px 4px) }
 	.legend i.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-strong) }
-	#timeline svg { cursor: pointer; display: block }
+	#timeline svg.chart { cursor: pointer; display: block; max-width: 100%; height: auto }
 	#run-switch { display: inline-flex; flex-wrap: wrap; margin-bottom: 4px }
-	.run-score { font-size: 12px; color: var(--muted); margin-bottom: 2px; font-variant-numeric: tabular-nums }
+	/* Below the chart: the hovered (or selected) step. Fixed height, so hovering never shifts the layout. */
+	.target svg { width: 12px; height: 12px; vertical-align: -1.5px; margin-right: 4px }
+	/* Two lines when there's room; in a narrow panel it grows rather than cutting text off. */
+	.chart-info { min-height: 56px; font-size: 12px; font-variant-numeric: tabular-nums }
+	/* Points up at its column: the pointer sits at --pointer from the card's left edge. */
+	.info-card { position: relative; max-width: 100%; margin-top: 7px; padding: 3px 9px; border: 1px solid var(--input-border); border-left: 3px solid; border-radius: 4px; background: var(--surface) }
+	.info-card[hidden] { display: none }
+	/* Fixed-width slots: hovering along the chart changes the text, not its position. */
+	.info-card .slot { display: inline-block; white-space: nowrap; margin-right: .4em }
+	.info-card .step-label { min-width: 4.3em }
+	.info-card .selected-tag { min-width: 5.2em }
+	.info-card .actor { min-width: 3.8em }
+	.info-card .action { min-width: 11.5em }
+	.info-card .value-bananas { min-width: 10.5em }
+	.info-card .value-agentTargetBananas, .info-card .value-trainerTargetBananas { min-width: 11em }
+	.info-card::before, .info-card::after { content: ""; position: absolute; left: calc(var(--pointer, 20px) - 7px); border: 7px solid transparent; border-top: 0 }
+	.info-card::before { top: -7px; border-bottom-color: var(--input-border) }
+	.info-card::after { top: -6px; border-bottom-color: var(--surface) }
+	.chart-info .values { display: flex; flex-wrap: wrap; gap: 0 14px; color: var(--muted-strong) }
+	.chart-info .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px }
+	.legend i.box.tint { opacity: .35 }
+	.run-score { cursor: help; font-size: 12px; color: var(--muted); margin-bottom: 2px; font-variant-numeric: tabular-nums }
 	#run-switch button { font-size: 12px; padding: 1px 8px; border-radius: 0; margin-left: -1px; background: transparent; color: var(--muted) }
 	#run-switch button:first-child { border-radius: 6px 0 0 6px; margin-left: 0 }
 	#run-switch button:last-child { border-radius: 0 6px 6px 0 }
@@ -108,6 +162,7 @@
 	#tooltip { position: fixed; z-index: 10; pointer-events: none; background: var(--surface); border: 1px solid var(--input-border); border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.2); color: var(--text); max-width: 320px }
 	#step-menu { position: fixed; z-index: 11; background: var(--surface); border: 1px solid var(--input-border); border-radius: 6px; padding: 4px; box-shadow: 0 4px 12px rgba(0,0,0,.2); display: flex; flex-direction: column; min-width: 180px }
 	#step-menu[hidden] { display: none }
+	#step-menu .force-title { font-size: 13px; font-weight: 600; color: var(--purple); padding: 2px 6px 0 }
 	#step-menu .menu-title { font-size: 12px; color: var(--muted); padding: 2px 6px 4px }
 	#step-menu button { text-align: left; border: none; background: transparent; border-radius: 4px; padding: 3px 8px; font-family: var(--mono); font-size: 12px }
 	#step-menu button:hover { background: var(--hover) } #step-menu button:active { background: var(--active) }
@@ -125,10 +180,27 @@
 	tbody td.action:hover { background: var(--hover) }
 	tbody td.selected, tbody td.selected:hover { background: var(--select) }
 	/* the actor does something different than its previous move */
-	tbody td.changed { box-shadow: inset 0 2px 0 var(--purple) }
-	tbody td.differs { font-weight: 600 }
-	.pinned-action { margin-left: 6px; font-size: 11px; color: var(--muted); font-weight: 400; text-decoration: line-through }
-	.steps-scroll { position: relative; max-height: 260px; overflow: auto; margin: 0 12px; border: 1px solid var(--line); border-radius: 6px }
+	/* Differences from the compared run: one color everywhere (--diff). The compared run's value is struck through. */
+	.diff { color: var(--diff) }
+	tbody td.differs { box-shadow: inset 3px 0 0 var(--diff); background: color-mix(in srgb, var(--diff) 9%, transparent) }
+	.compared { margin: 0 6px; font-size: 11px; color: var(--diff); font-weight: 400; text-decoration: line-through }
+	td.number .compared { margin: 0 6px 0 0 }
+	#compare-bar { flex-basis: 100%; display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 3px 4px 3px 10px; border: 1px solid color-mix(in srgb, var(--diff) 45%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--diff) 7%, transparent) }
+	#compare-bar[hidden] { display: none }
+	#compare-bar .diff-swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--diff); flex: none }
+	#compare-bar button { font-size: 12px; padding: 1px 8px }
+	#compare-bar .close { margin-left: auto; display: inline-flex; padding: 2px 4px; border: none; background: transparent; color: var(--muted) }
+	#compare-bar .close:hover { color: var(--text); background: var(--hover) }
+	#compare-bar .close svg { width: 15px; height: 15px }
+	.option-compared { flex: none; min-width: 4.2em; text-align: right; font-family: var(--mono); font-size: 12px; color: var(--muted) }
+	.option-compared:empty { min-width: 0 }
+	.option-compared.differs { color: var(--diff) }
+	.legend i.dashed-series { background: repeating-linear-gradient(90deg, var(--muted-strong) 0 4px, transparent 4px 7px) }
+	#pane-run { scrollbar-gutter: stable }
+	#pane-steps { display: flex; flex-direction: column; padding-bottom: 8px }
+	.steps-scroll table { width: auto }
+	.steps-scroll table td.action { min-width: 13em }
+	.steps-scroll { position: relative; flex: 1; min-height: 0; overflow: auto; width: fit-content; max-width: calc(100% - 24px); margin: 0 12px; border: 1px solid var(--line); border-radius: 6px }
 	#pinned-note { font-size: 12px; margin: 4px 12px }
 	.too-slow { color: var(--tie-text); background: var(--tie-bg); border: 1px solid var(--tie-border); border-radius: 4px; padding: 2px 6px; margin-bottom: 4px }
 	.step-number { display: inline-block; min-width: 2.2em; font-size: 11px; color: var(--muted) }
@@ -143,9 +215,6 @@
 	.row button.force.on { color: var(--purple); border-color: var(--purple) }
 	.tie { font-size: 11px; color: var(--tie-text); background: var(--tie-bg); border: 1px solid var(--tie-border); border-radius: 3px; padding: 0 4px; margin-left: 6px; font-weight: 500 }
 
-	.world dl { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; margin: 6px 0 0; font-size: 13px }
-	.world dt { color: var(--muted) } .world dd { margin: 0; font-family: var(--mono) }
-	.world .changed { background: var(--changed-bg); border-radius: 3px; padding: 0 3px }
 
 	#tree { padding: 4px 0; font-size: 13px }
 	.row { display: flex; align-items: center; gap: 6px; height: 24px; padding-right: 12px; cursor: pointer; white-space: nowrap }
@@ -176,6 +245,21 @@
 	.code .line { white-space: pre; padding-right: 12px }
 	.code .line.skipped { opacity: .35 }
 	.code .number { display: inline-block; width: 3.5em; padding-right: 1em; text-align: right; color: var(--line-number); user-select: none }
+	/* Code panels: the editor fills the panel below the file link. */
+	.code-pane { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0 }
+	.code-pane .code { overflow: auto; flex: 1; min-height: 0 }
+	.code-pane .code[hidden], .code-editor[hidden] { display: none }
+	.code-editor { flex: 1; min-height: 0 }
+	.code-line-shown { background: color-mix(in srgb, var(--link) 7%, transparent) }
+	.code-line-skipped { opacity: .4 }
+	/* The values are clickable (they step into calls), but Monaco's zone layer ignores the mouse and its text layer
+	   lies on top: take the mouse back and sit above the text layer. */
+	.code-values-zone { font: 11.5px/1.45 var(--mono); pointer-events: auto; z-index: 1 }
+	.code-values-zone .values { margin: 1px 12px 0 0; padding: 1px 6px; border-radius: 3px; background: var(--values-bg); color: var(--values-text); width: fit-content; max-width: calc(100% - 12px); white-space: normal }
+	.code-values-zone .values .call { cursor: pointer; border-bottom: 1px dotted var(--muted) }
+	.code-values-zone .values .call:hover { background: var(--values-hover) }
+	.code-values-zone .values .chosen { color: var(--chosen); font-weight: 600 }
+	#plus-menu .menu-separated-title { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px }
 	.code .values { margin: 0 12px 3px 0; padding: 1px 6px; border-radius: 3px; background: var(--values-bg); color: var(--values-text); font-size: 11.5px; width: fit-content; max-width: calc(100% - 6em) }
 	.code .values .call { cursor: pointer; border-bottom: 1px dotted var(--muted) }
 	.code .values .call:hover { background: var(--values-hover) }
@@ -188,28 +272,36 @@
 <header>
 	<h1>deceptive-search</h1>
 	<div id="parameters"></div>
-	<span id="busy" title="searches still running in the background"></span>
-	<div id="panel-toggles" role="group" aria-label="panels"></div>
-	<button id="reset-layout" type="button" title="restore the default panel layout">reset layout</button>
-	<button id="copy-permalink" type="button"></button>
-	<a href="https://github.com/gggscript/deceptive-search" id="github-link" title="source code on GitHub" aria-label="source code on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.37A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a>
-	<button id="pin" type="button"></button>
-	<button id="theme" type="button" title="switch light/dark"></button>
-	<span class="hint"><kbd>n</kbd> <kbd>p</kbd> step, <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> tree, middle-drag a number to change it, click a value in the code to step into it, <kbd>Ctrl</kbd> <kbd>Z</kbd> undo</span>
+	<button id="pin" type="button"></button><!-- moved into the "run" group by renderParameterInputs -->
+	<div id="compare-bar" hidden></div>
 </header>
-<main id="dock"></main>
+<div id="workspace"><main id="dock"></main><nav id="activity-bar" aria-label="panels"></nav></div>
+<footer id="status-bar">
+	<span id="busy" title="searches still running in the background"></span>
+	<span class="status-spacer"></span>
+	<button id="shortcuts" type="button" title="keyboard shortcuts (?)" aria-label="keyboard shortcuts" aria-expanded="false"></button>
+	<button id="version" type="button" aria-haspopup="true" aria-expanded="false"></button>
+	<button id="copy-permalink" type="button"></button>
+	<button id="theme" type="button" title="switch light/dark"></button>
+	<a href="https://github.com/gggscript/deceptive-search" id="github-link" class="status-item" title="source code on GitHub" aria-label="source code on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.37A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg></a>
+</footer>
+<div id="version-menu" hidden></div>
+<div id="shortcuts-popover" hidden>
+	<dl>
+		<dt><kbd>n</kbd> <kbd>p</kbd></dt><dd>next, previous step</dd>
+		<dt><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></dt><dd>move in the decision tree</dd>
+		<dt><kbd>Ctrl</kbd> <kbd>Z</kbd></dt><dd>undo (<kbd>Ctrl</kbd> <kbd>Y</kbd> redo)</dd>
+		<dt>middle-drag</dt><dd>a number, to change it</dd>
+		<dt>click</dt><dd>a value in the code, to step into it</dd>
+		<dt>right-click</dt><dd>an action in the table, to force another</dd>
+		<dt><kbd>?</kbd></dt><dd>this list</dd>
+	</dl>
+</div>
 <!-- Panel contents. Dockview moves each into its panel; closed panels are parked here so their elements stay in the document. -->
 <div id="panel-parking" hidden>
 	<div class="pane" id="pane-run">
 		<div class="panel" id="timeline"></div>
 		<div id="pinned-note"></div>
-		<div class="panel muted small" style="margin-bottom:4px">one row per round, right-click an action to force another, <span style="box-shadow: inset 0 2px 0 var(--purple); padding-top: 2px">line above</span> = different action than that actor's previous move, click an action to inspect it</div>
-		<div class="steps-scroll">
-			<table><thead id="steps-head"></thead><tbody id="steps"></tbody></table>
-		</div>
-	</div>
-	<div class="pane" id="pane-world">
-		<div class="panel world" id="world"></div>
 	</div>
 	<div class="pane" id="pane-sweep">
 		<div class="panel">
@@ -219,17 +311,25 @@
 			<div id="sweep-status" class="muted small"></div>
 		</div>
 	</div>
+	<div class="pane" id="pane-steps">
+		<div class="panel muted small" style="margin-bottom:4px">one row per round (agent, then trainer), click an action to inspect it, right-click it to force another</div>
+		<div class="steps-scroll">
+			<table><thead id="steps-head"></thead><tbody id="steps"></tbody></table>
+		</div>
+	</div>
 	<div class="pane" id="pane-decision">
 		<div class="pane-toolbar"><label><input type="checkbox" id="show-all-calls"> show all calls</label></div>
 		<div id="tree"></div>
 	</div>
-	<div class="pane" id="pane-code">
+	<div class="pane code-pane" id="pane-code">
 		<a class="code-title" id="code-title"></a>
 		<div class="code" id="code"></div>
+		<div class="code-editor" id="code-editor" hidden></div>
 	</div>
 </div>
 <div id="tooltip" hidden></div>
 <div id="step-menu" hidden></div>
+<div id="plus-menu" hidden></div>
 <script>/*CORE_SOURCES*/</script>
 <script type="module">/*BUNDLE*/</script>
 </body>

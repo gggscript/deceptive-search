@@ -27,7 +27,7 @@ let world: World = {
 	isDeployed: false,
 	stepsUntilDeployment: numberFlag("deployAfterStep", 0) > 0 ? numberFlag("deployAfterStep", 0) : null,
 	agentCanChangeOwnTarget: numberFlag("agentCanChangeOwnTarget", 1) !== 0,
-	predictionMode: (["capped", "fullDepthDirect", "actualFuture"] as const)[numberFlag("predictionMode", 0)] ?? "capped", // 0, 1 or 2
+	predictionMode: (["capped", "fullDepthDirect", "actualFuture"] as const)[numberFlag("predictionMode", 1)] ?? "capped", // 0, 1 or 2
 	stepsLeftInRun: null,
 }
 const stepCount = numberFlag("stepCount", 16)
